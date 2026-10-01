@@ -4,17 +4,22 @@
 
 ![Moodwave landing page](docs/screenshots/landing.jpg)
 
-| Generated playlist | Conversational refinement | Mobile |
+| Playlist | Conversational refinement | Mobile |
 | --- | --- | --- |
 | ![Playlist results](docs/screenshots/playlist.jpg) | ![Refining a playlist](docs/screenshots/refine.jpg) | ![Mobile view](docs/screenshots/mobile.jpg) |
 
-**Stack:** Next.js 15 · React 19 · TypeScript · Tailwind CSS v4 · Motion · TanStack Query · **Python 3.12 · FastAPI · SQLModel** · Anthropic Claude · Spotify Web API · Docker · GitHub Actions
+| Library | How it works | Composing |
+| --- | --- | --- |
+| ![Library](docs/screenshots/library.jpg) | ![How it works](docs/screenshots/how-it-works.jpg) | ![Generation transition](docs/screenshots/generating.jpg) |
+
+**Stack:** Next.js 15 · React 19 · TypeScript · Tailwind CSS v4 · Motion · TanStack Query · Radix · **Python 3.12 · FastAPI · SQLModel** · Anthropic Claude · Spotify Web API · Docker · GitHub Actions
 
 ---
 
 ## Table of contents
 
 1. [Features](#features)
+1. [Design: "Nocturne"](#design-nocturne)
 2. [Quick start (demo mode, no keys needed)](#quick-start-demo-mode-no-keys-needed)
 3. [Connecting Spotify and Claude](#connecting-spotify-and-claude)
 4. [Environment variables](#environment-variables)
@@ -49,7 +54,32 @@
 - Landing, Studio (generator), Results/Editor, Library (with filters plus your Spotify playlists) and How-it-works pages.
 - Skeleton screens, empty states, error states with retry, auth gates, toasts, a staged generation progress screen, rate-limit messages and an "only N songs found" notice.
 - Responsive from 360px phones (bottom-sheet refine bar) to wide desktops.
-- **Demo mode:** with no credentials, a curated catalog of 220+ real songs and an offline heuristic curator keep every feature working.
+- **Demo mode:** with no credentials, a curated catalog of 290+ real songs (with real artwork and artist portraits) and an offline heuristic curator keep every feature working.
+
+## Design: "Nocturne"
+
+The interface is built to feel like a music product first and an AI product second.
+
+- **Typography:** oversized **Fraunces** (soft, optical-sized serif with italic accents) for headlines, **Inter Tight** for interface text, and **JetBrains Mono** for small uppercase metadata ("24 SONGS · 1 HR 32 MIN").
+- **Palette:** a warm near-black with three surface levels, warm off-white text, and one restrained lilac accent used only for focus, active states and the primary action. Each playlist tints a dim atmosphere from its mood (energy and valence), plus a dissolved, blurred version of its lead record.
+- **Real artists as the imagery:** real album covers and artist photography carry the visual identity. Portraits get a consistent editorial monochrome treatment that blooms to colour on hover, so mismatched press photos read as one system. There are no stock illustrations.
+- **Surfaces:** mostly solid cards with hairline borders and long soft shadows. Translucent "chrome" is reserved for the floating nav, the composers and the player.
+- **Motion:** one easing curve throughout, page transitions, scroll reveals, a focus halo on the composer, floating mood cards, a "records settling into place" generation screen, rows that animate in place on refine, and a pipeline line that draws on scroll. `prefers-reduced-motion` is respected everywhere.
+
+**Key surfaces**
+
+- **Hero:** "What are you *in the mood* for?" with the composer at the centre. Five mood cards ("Late-night drive through Toronto", "Coding at 2 AM", and others) orbit it, each cast with real artists. Behind it is a slow wall of artist portraits, and hovering a mood lights up its artists.
+- **Playlist:** a 6-cover collage with pointer tilt, the AI title set very large, and liner-notes metadata (songs, duration, mood, energy, genres). A **Featuring** strip of artist portraits spotlights an artist's songs, the **Liner notes** show the curator's reasoning as a pull-quote with the energy arc, and the tracklist has a cover and an AI reason on every row.
+- **"Make it more…":** a floating refinement composer with suggestions (Energetic, Chill, Nostalgic, More indie, Less mainstream, More female artists, No explicit songs). Free text works too ("more upbeat but keep the same artists"), and a session history sits behind a popover.
+- **Library:** a masonry collection of collage cards. **How it works:** four animated stages (Your words → AI understands the vibe → Music discovery → Personalized playlist).
+
+### Demo artwork
+
+`apps/api/scripts/fetch_artwork.py` fetches real album covers and artist portraits for the demo catalog once, from Deezer's and Apple's keyless public APIs, and commits them as `app/data/artwork.json` and `app/data/artist_images.json`. The app never calls those services at runtime. Every hit is verified with the same fuzzy matcher the pipeline uses. The script prefers the song's original album over compilations, falls back to an album search, and prefers the most-followed artist when names collide. Portraits that are placeholders or logos rather than the artist are excluded by hand (`REJECTED_PORTRAITS`). Coverage is 291/293 covers and 186/191 portraits. Live Spotify mode uses Spotify's own artwork and artist images (one batched `/v1/artists` call per playlist).
+
+```bash
+cd apps/api && python -m scripts.fetch_artwork   # resumable; keeps existing entries
+```
 
 ## Quick start (demo mode, no keys needed)
 
@@ -138,7 +168,7 @@ flowchart LR
     end
     Claude["Anthropic Claude<br/>structured outputs"]
     Spotify["Spotify Web API<br/>+ Accounts (OAuth PKCE)"]
-    Catalog["Demo catalog<br/>220+ songs"]
+    Catalog["Demo catalog<br/>290+ songs + artwork"]
 
     UI -- "same-origin fetch<br/>httpOnly session cookie" --> RW --> R
     R --> P
@@ -230,6 +260,7 @@ Interactive docs are available at **http://127.0.0.1:8000/docs** (OpenAPI).
 | `POST` | `/playlists/{id}/save` | Create the playlist on Spotify |
 | `GET` | `/spotify/search?q=` | Track search for manual adds |
 | `GET` | `/spotify/playlists` | The user's Spotify playlists |
+| `GET` | `/catalog/featured` | Public showcase data: featured tracks and artists with artwork and portraits |
 
 ## Project structure
 
@@ -239,7 +270,7 @@ moodwave/
 │  ├─ api/                        FastAPI service (Python)
 │  │  ├─ app/
 │  │  │  ├─ core/                 settings, sessions, PKCE, token encryption
-│  │  │  ├─ data/catalog.py       demo catalog (220+ real songs + features)
+│  │  │  ├─ data/catalog.py       demo catalog (290+ real songs + features), artwork.json, artist_images.json
 │  │  │  ├─ routers/              auth · playlists · spotify
 │  │  │  ├─ services/
 │  │  │  │  ├─ ai/                AIProvider protocol, Claude + heuristic, prompts & schemas
@@ -263,7 +294,7 @@ moodwave/
 ## Testing and quality
 
 ```bash
-cd apps/api && pytest -q                 # 16 tests: matching, filters, intent parsing, refine,
+cd apps/api && pytest -q                 # 23 tests: matching, filters, intent parsing, refine,
                                          # replace, AI fallback, hallucination guard, full API lifecycle
 ruff check app tests && ruff format --check app tests
 

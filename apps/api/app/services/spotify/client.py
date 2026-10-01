@@ -37,6 +37,7 @@ def parse_track(item: dict[str, Any], reason: str | None = None, energy: float |
         uri=item.get("uri") or f"spotify:track:{item['id']}",
         title=item.get("name", "Unknown"),
         artists=[a.get("name", "") for a in item.get("artists", [])] or ["Unknown"],
+        artist_ids=[a.get("id", "") for a in item.get("artists", []) if a.get("id")],
         album=album.get("name", ""),
         image_url=images[0]["url"] if images else None,
         duration_ms=item.get("duration_ms", 0),
@@ -124,6 +125,25 @@ class SpotifyHttpClient:
                 seen.add(track.id)
                 found.append(track.model_copy(update={"reason": "Discovered via genre & artist search"}))
         return found[:limit]
+
+    async def attach_artist_images(self, tracks: list[Track]) -> list[Track]:
+        """Fill `artist_images` with one batched /artists lookup per 50 unique ids."""
+        ids = list(dict.fromkeys(i for t in tracks if not t.artist_images for i in t.artist_ids))
+        images: dict[str, str | None] = {}
+        for start in range(0, len(ids), 50):
+            try:
+                data = await self._request("GET", "/artists", params={"ids": ",".join(ids[start : start + 50])})
+            except SpotifyError as exc:
+                log.info("Artist image lookup skipped: %s", exc)
+                return tracks
+            for artist in (data or {}).get("artists") or []:
+                if artist:
+                    pics = artist.get("images") or []
+                    images[artist["id"]] = pics[0]["url"] if pics else None
+        return [
+            t if t.artist_images else t.model_copy(update={"artist_images": [images.get(i) for i in t.artist_ids]})
+            for t in tracks
+        ]
 
     async def top_artists(self, limit: int = 10) -> list[str]:
         try:

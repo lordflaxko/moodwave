@@ -10,10 +10,13 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
   }, [error]);
 
   return (
-    <div className="mx-auto flex max-w-md flex-col items-center px-4 pt-28 text-center">
-      <h1 className="text-2xl font-semibold tracking-tight">Something went off-beat</h1>
-      <p className="mt-2 text-fg-muted">An unexpected error occurred. Try again, and if it keeps happening, refresh the page.</p>
-      <Button variant="primary" className="mt-6" onClick={reset}>
+    <div className="mx-auto flex max-w-xl flex-col items-center px-5 pt-44 text-center">
+      <p className="eyebrow">Something went wrong</p>
+      <h1 className="display mt-4 text-[clamp(3rem,8vw,5rem)]">
+        The needle <em>slipped.</em>
+      </h1>
+      <p className="mt-5 text-fg-muted">An unexpected error occurred. Try again, and refresh if it keeps happening.</p>
+      <Button variant="solid" size="lg" className="mt-9" onClick={reset}>
         Try again
       </Button>
     </div>

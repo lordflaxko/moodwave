@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.db import init_db
-from app.routers import auth, playlists, spotify
+from app.routers import auth, catalog, playlists, spotify
 from app.services.ai.base import AIError
 from app.services.spotify.base import SpotifyError
 
@@ -63,3 +63,4 @@ def health() -> dict[str, str]:
 app.include_router(auth.router)
 app.include_router(playlists.router)
 app.include_router(spotify.router)
+app.include_router(catalog.router)
