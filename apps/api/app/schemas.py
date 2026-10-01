@@ -1,0 +1,168 @@
+"""Pydantic models shared by the API surface, the AI layer, and the pipeline.
+
+`apps/web/lib/types.ts` mirrors these shapes for the frontend.
+"""
+
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+Vocals = Literal["any", "female", "male", "mixed", "instrumental"]
+
+
+class Track(BaseModel):
+    id: str = Field(description="Spotify track id (or catalog id in demo mode)")
+    uri: str
+    title: str
+    artists: list[str]
+    album: str
+    image_url: str | None = None
+    duration_ms: int
+    explicit: bool = False
+    popularity: int | None = None
+    external_url: str | None = None
+    release_year: int | None = None
+    # AI-provided annotations (Spotify no longer exposes audio features to new apps).
+    energy: float | None = Field(default=None, ge=0, le=1)
+    reason: str | None = None
+
+
+class MusicalIntent(BaseModel):
+    """The model's structured interpretation of a natural-language request."""
+
+    title: str
+    description: str
+    moods: list[str]
+    genres: list[str]
+    characteristics: list[str] = Field(default_factory=list, description="Sonic traits, e.g. 'warm analog synths'")
+    energy: float = Field(ge=0, le=1)
+    valence: float = Field(ge=0, le=1, description="0 = melancholic, 1 = euphoric")
+    tempo_min: int = Field(ge=40, le=220)
+    tempo_max: int = Field(ge=40, le=220)
+    era: str | None = None
+    vocals: Vocals = "any"
+    explicit_allowed: bool = True
+    reference_artists: list[str] = Field(default_factory=list)
+    rationale: str = Field(description="Why this plan fits the request, written for the listener")
+
+
+class Candidate(BaseModel):
+    title: str
+    artist: str
+    energy: float = Field(ge=0, le=1)
+    reason: str
+
+
+class PlaylistPlan(BaseModel):
+    intent: MusicalIntent
+    candidates: list[Candidate]
+
+
+class RefinementPlan(BaseModel):
+    intent: MusicalIntent
+    remove_track_ids: list[str]
+    candidates: list[Candidate]
+    target_length: int = Field(description="How many songs the playlist should have after the change")
+    summary: str = Field(description="One or two sentences describing what changed")
+
+
+# --- Requests ----------------------------------------------------------------------------
+
+
+class GenerateRequest(BaseModel):
+    prompt: str = Field(min_length=3, max_length=500)
+    length: int = Field(default=24, ge=15, le=30)
+    energy: float | None = Field(default=None, ge=0, le=1, description="Optional energy override")
+    allow_explicit: bool = True
+    use_my_taste: bool = False
+
+
+class RefineRequest(BaseModel):
+    instruction: str = Field(min_length=2, max_length=300)
+
+
+class UpdatePlaylistRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=100)
+    description: str | None = Field(default=None, max_length=300)
+
+
+class ReplaceTracksRequest(BaseModel):
+    """Full ordered track list; used for reorder, remove and manual add."""
+
+    tracks: list[Track] = Field(min_length=1, max_length=50)
+
+
+# --- Responses -------------------------------------------------------------------------------
+
+
+class RefinementOut(BaseModel):
+    id: int
+    instruction: str
+    summary: str
+    added: int
+    removed: int
+    created_at: datetime
+
+
+class PlaylistStats(BaseModel):
+    track_count: int
+    total_duration_ms: int
+    artist_count: int
+    explicit_count: int
+    avg_energy: float | None
+    energy_curve: list[float]
+
+
+class PlaylistOut(BaseModel):
+    id: str
+    title: str
+    description: str
+    prompt: str
+    intent: MusicalIntent
+    tracks: list[Track]
+    stats: PlaylistStats
+    refinements: list[RefinementOut]
+    ai_source: Literal["claude", "heuristic"]
+    spotify_playlist_id: str | None
+    spotify_url: str | None
+    notice: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class PlaylistSummary(BaseModel):
+    id: str
+    title: str
+    prompt: str
+    moods: list[str]
+    energy: float
+    cover_images: list[str | None]
+    cover_seeds: list[str]
+    track_count: int
+    total_duration_ms: int
+    saved_to_spotify: bool
+    spotify_url: str | None
+    created_at: datetime
+
+
+class UserOut(BaseModel):
+    id: str
+    display_name: str
+    avatar_url: str | None
+    is_demo: bool
+
+
+class AppConfigOut(BaseModel):
+    demo_mode: bool
+    spotify_enabled: bool
+    ai_enabled: bool
+    ai_model: str | None
+
+
+class SpotifyPlaylistOut(BaseModel):
+    id: str
+    name: str
+    image_url: str | None
+    track_count: int
+    external_url: str | None

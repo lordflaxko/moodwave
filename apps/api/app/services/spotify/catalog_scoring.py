@@ -1,0 +1,157 @@
+"""Feature-based scoring over the demo catalog.
+
+Used by the demo Spotify client (discover/backfill) and by the heuristic AI provider,
+which "knows" the songs in the catalog the way a language model knows songs in general.
+"""
+
+import hashlib
+
+from app.data.catalog import CATALOG, CatalogRow
+from app.schemas import MusicalIntent, Track
+
+# Loose genre families so "indie" also matches "indie folk", "dream pop", etc.
+GENRE_FAMILIES: dict[str, set[str]] = {
+    "indie": {
+        "indie",
+        "indie folk",
+        "indie rock",
+        "indie pop",
+        "dream pop",
+        "bedroom pop",
+        "alternative",
+        "psychedelic",
+    },
+    "alternative": {"alternative", "indie rock", "grunge", "alt pop", "indie"},
+    "pop": {"pop", "dance pop", "alt pop", "synth pop", "k-pop", "indie pop", "latin pop", "art pop"},
+    "electronic": {
+        "electronic",
+        "house",
+        "deep house",
+        "tech house",
+        "progressive house",
+        "edm",
+        "future bass",
+        "disco",
+        "synthwave",
+        "dubstep",
+    },
+    "dance": {
+        "dance pop",
+        "house",
+        "tech house",
+        "edm",
+        "disco",
+        "progressive house",
+        "amapiano",
+        "afrobeats",
+        "reggaeton",
+    },
+    "house": {"house", "deep house", "tech house", "progressive house"},
+    "hip hop": {"hip hop"},
+    "rap": {"hip hop"},
+    "r&b": {"r&b", "soul", "funk"},
+    "soul": {"soul", "r&b", "funk", "jazz"},
+    "funk": {"funk", "disco", "soul"},
+    "rock": {"rock", "hard rock", "indie rock", "grunge", "alternative", "soft rock", "metal", "pop punk"},
+    "metal": {"metal", "hard rock"},
+    "punk": {"pop punk", "grunge"},
+    "jazz": {"jazz"},
+    "lo-fi": {"lo-fi", "jazz", "bedroom pop", "trip hop", "ambient"},
+    "ambient": {"ambient", "classical", "lo-fi"},
+    "classical": {"classical", "ambient"},
+    "folk": {"folk", "indie folk", "acoustic", "country"},
+    "acoustic": {"acoustic", "folk", "indie folk"},
+    "country": {"country", "folk"},
+    "latin": {"reggaeton", "latin pop", "flamenco pop"},
+    "reggaeton": {"reggaeton"},
+    "afrobeats": {"afrobeats", "amapiano"},
+    "k-pop": {"k-pop"},
+    "synthwave": {"synthwave", "synth pop"},
+    "dream pop": {"dream pop", "bedroom pop", "indie"},
+    "trip hop": {"trip hop"},
+    "disco": {"disco", "funk"},
+}
+
+
+def catalog_id(row: CatalogRow) -> str:
+    return "demo_" + hashlib.md5(f"{row.title}|{row.artist}".encode()).hexdigest()[:14]
+
+
+def row_to_track(row: CatalogRow, reason: str | None = None) -> Track:
+    tid = catalog_id(row)
+    return Track(
+        id=tid,
+        uri=f"demo:track:{tid}",
+        title=row.title,
+        artists=[row.artist],
+        album=row.album,
+        image_url=None,
+        duration_ms=row.seconds * 1000,
+        explicit=row.explicit,
+        popularity=row.popularity,
+        external_url=None,
+        release_year=row.year,
+        energy=row.energy,
+        reason=reason,
+    )
+
+
+CATALOG_BY_ID: dict[str, CatalogRow] = {catalog_id(row): row for row in CATALOG}
+
+
+def expand_genres(genres: list[str]) -> set[str]:
+    expanded: set[str] = set()
+    for genre in genres:
+        key = genre.lower().strip()
+        expanded.add(key)
+        expanded |= GENRE_FAMILIES.get(key, set())
+        # Partial matches: "mellow indie" -> indie family
+        for family, members in GENRE_FAMILIES.items():
+            if family in key:
+                expanded |= members
+    return expanded
+
+
+def _era_matches(era: str | None, year: int) -> bool:
+    if not era:
+        return False
+    era = era.lower()
+    for decade in ("60", "70", "80", "90", "00", "10", "20"):
+        if f"{decade}s" in era:
+            start = int(("19" if decade in ("60", "70", "80", "90") else "20") + decade)
+            return start <= year < start + 10
+    if "classic" in era or "retro" in era or "vintage" in era:
+        return year < 2000
+    if "modern" in era or "recent" in era or "new" in era:
+        return year >= 2015
+    return False
+
+
+def score_row(row: CatalogRow, intent: MusicalIntent) -> float:
+    genres = expand_genres(intent.genres)
+    score = 1.0
+    score -= abs(row.energy - intent.energy) * 1.6
+    score -= abs(row.valence - intent.valence) * 0.7
+    if row.genre in genres:
+        score += 0.7
+    if intent.tempo_min <= row.bpm <= intent.tempo_max:
+        score += 0.15
+    if intent.vocals != "any":
+        if row.vocals == intent.vocals or (intent.vocals in ("female", "male") and row.vocals == "mixed"):
+            score += 0.35
+        else:
+            score -= 0.45
+    if any(a.lower() == row.artist.lower() for a in intent.reference_artists):
+        score += 0.4
+    if _era_matches(intent.era, row.year):
+        score += 0.25
+    score += row.popularity / 1000  # gentle tie-breaker
+    return score
+
+
+def rank_catalog(intent: MusicalIntent, exclude_ids: set[str] | None = None) -> list[CatalogRow]:
+    exclude_ids = exclude_ids or set()
+    rows = [
+        row for row in CATALOG if catalog_id(row) not in exclude_ids and (intent.explicit_allowed or not row.explicit)
+    ]
+    return sorted(rows, key=lambda row: score_row(row, intent), reverse=True)
