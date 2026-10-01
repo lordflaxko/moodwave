@@ -5,19 +5,23 @@ browser; the Next.js frontend talks to this service through a same-origin proxy.
 """
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+API_ROOT = Path(__file__).resolve().parents[2]
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    # .env is resolved relative to apps/api so the service works from any working directory.
+    model_config = SettingsConfigDict(env_file=API_ROOT / ".env", env_file_encoding="utf-8", extra="ignore")
 
     # --- App ---------------------------------------------------------------
     app_name: str = "Moodwave API"
     environment: str = Field(default="development", description="development | production | test")
     frontend_url: str = "http://127.0.0.1:3000"
-    database_url: str = "sqlite:///./moodwave.db"
+    database_url: str = f"sqlite:///{(API_ROOT / 'moodwave.db').as_posix()}"
 
     # Used to sign the session cookie and derive the token-encryption key.
     session_secret: str = "dev-only-change-me-please-0123456789abcdef"

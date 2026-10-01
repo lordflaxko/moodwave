@@ -128,12 +128,16 @@ def _era_matches(era: str | None, year: int) -> bool:
 
 
 def score_row(row: CatalogRow, intent: MusicalIntent) -> float:
-    genres = expand_genres(intent.genres)
+    # The first genre is usually what the listener asked for explicitly; weight it highest.
+    primary = expand_genres(intent.genres[:1])
+    secondary = expand_genres(intent.genres[1:])
     score = 1.0
     score -= abs(row.energy - intent.energy) * 1.6
     score -= abs(row.valence - intent.valence) * 0.7
-    if row.genre in genres:
-        score += 0.7
+    if row.genre in primary:
+        score += 0.95
+    elif row.genre in secondary:
+        score += 0.5
     if intent.tempo_min <= row.bpm <= intent.tempo_max:
         score += 0.15
     if intent.vocals != "any":
