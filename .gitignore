@@ -1,11 +1,9 @@
 # Python
 .venv/
-venv/
 __pycache__/
-*.py[cod]
+*.pyc
 .pytest_cache/
 .ruff_cache/
-.mypy_cache/
 *.db
 
 # Node
@@ -13,14 +11,13 @@ node_modules/
 .next/
 out/
 *.tsbuildinfo
+next-env.d.ts
 
-# Environment / secrets
+# Env & OS
 .env
-.env.*
-!.env.example
-
-# Editors & OS
-.vscode/
-.idea/
+.env.local
 .DS_Store
 Thumbs.db
+
+# Local tooling
+.claude/

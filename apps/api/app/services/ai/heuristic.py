@@ -6,12 +6,18 @@ whole product demonstrable offline, and the pipeline never needs to know which p
 """
 
 import re
+import zlib
 from dataclasses import dataclass, field
 from typing import Literal
 
 from app.data.catalog import CATALOG
 from app.schemas import Candidate, MusicalIntent, PlaylistPlan, RefinementPlan, Track
 from app.services.spotify.catalog_scoring import CATALOG_BY_ID, catalog_id, expand_genres, rank_catalog
+
+
+def hash_text(text: str) -> int:
+    """Stable across processes (unlike built-in hash), so reasons don't shuffle on restart."""
+    return zlib.crc32(text.encode())
 
 
 @dataclass
@@ -24,6 +30,7 @@ class _Rule:
     genres: list[str] = field(default_factory=list)
     traits: list[str] = field(default_factory=list)
     tempo: tuple[int, int] | None = None
+    scene: str = "your moment"
 
 
 _RULES: list[_Rule] = [
@@ -36,6 +43,7 @@ _RULES: list[_Rule] = [
         ["lo-fi", "ambient", "jazz"],
         ["minimal vocals", "steady, unobtrusive grooves"],
         (60, 110),
+        scene="long focus sessions",
     ),
     _Rule(
         ("late night", "late-night", "midnight", "night*", "3am", "2am"),
@@ -45,6 +53,7 @@ _RULES: list[_Rule] = [
         0.3,
         [],
         ["hazy, reverb-soaked textures", "slow-burning builds"],
+        scene="the late hours",
     ),
     _Rule(
         ("sleep*", "wind down", "unwind*", "relax*", "calm*", "meditat*", "spa"),
@@ -55,6 +64,7 @@ _RULES: list[_Rule] = [
         ["ambient", "classical"],
         ["gentle dynamics", "warm, sparse arrangements"],
         (50, 95),
+        scene="winding down",
     ),
     _Rule(
         ("chill", "mellow", "laid back", "laid-back", "lazy", "cozy", "cosy"),
@@ -64,6 +74,7 @@ _RULES: list[_Rule] = [
         0.55,
         [],
         ["soft edges", "unhurried tempos"],
+        scene="easy, unhurried listening",
     ),
     _Rule(
         ("workout*", "gym", "run", "running", "lifting", "cardio", "training"),
@@ -74,6 +85,7 @@ _RULES: list[_Rule] = [
         ["edm", "hip hop", "rock"],
         ["punchy drums", "big drops and hooks"],
         (120, 180),
+        scene="pushing your limits",
     ),
     _Rule(
         ("party", "pregame", "hype", "turn up", "banger"),
@@ -84,6 +96,7 @@ _RULES: list[_Rule] = [
         ["dance pop", "hip hop", "house"],
         ["huge choruses", "four-on-the-floor"],
         (110, 140),
+        scene="getting the night started",
     ),
     _Rule(
         ("dance", "club*", "rave", "dancing"),
@@ -94,6 +107,7 @@ _RULES: list[_Rule] = [
         ["house", "dance pop", "electronic"],
         ["driving basslines", "steady four-on-the-floor"],
         (115, 130),
+        scene="the dance floor",
     ),
     _Rule(
         ("happy", "sunny", "summer", "upbeat", "good vibes", "feel good", "feel-good", "joy*"),
@@ -103,6 +117,7 @@ _RULES: list[_Rule] = [
         0.88,
         ["pop", "funk", "indie"],
         ["bright melodies", "bouncy rhythms"],
+        scene="sunny, carefree days",
     ),
     _Rule(
         ("sad", "heartbreak*", "breakup", "break up", "cry*", "melanchol*", "lonely", "rainy", "rain"),
@@ -113,6 +128,7 @@ _RULES: list[_Rule] = [
         ["indie folk", "alt pop"],
         ["intimate vocals", "aching melodies"],
         (60, 120),
+        scene="quiet reflection",
     ),
     _Rule(
         ("road trip", "roadtrip", "drive", "driving", "highway", "cruise"),
@@ -122,6 +138,7 @@ _RULES: list[_Rule] = [
         0.68,
         ["indie rock", "rock", "pop"],
         ["sing-along choruses", "momentum"],
+        scene="the open road",
     ),
     _Rule(
         ("romantic", "love", "date night", "candle*", "intimate", "slow dance"),
@@ -132,6 +149,7 @@ _RULES: list[_Rule] = [
         ["r&b", "soul"],
         ["silky vocals", "slow grooves"],
         (65, 115),
+        scene="a slow evening together",
     ),
     _Rule(
         ("dinner*", "cooking", "coffee*", "morning*", "sunday", "brunch", "cafe"),
@@ -141,6 +159,7 @@ _RULES: list[_Rule] = [
         0.72,
         ["soul", "jazz", "acoustic"],
         ["organic instruments", "warm grooves"],
+        scene="slow mornings and kitchen time",
     ),
     _Rule(
         ("angry", "anger", "rage", "aggressive", "scream*"),
@@ -151,6 +170,7 @@ _RULES: list[_Rule] = [
         ["metal", "rock"],
         ["distorted guitars", "pounding drums"],
         (100, 180),
+        scene="letting off steam",
     ),
     _Rule(
         ("nostalg*", "throwback*", "retro", "memories", "old school", "oldies"),
@@ -160,6 +180,7 @@ _RULES: list[_Rule] = [
         0.6,
         [],
         ["timeless production"],
+        scene="looking back",
     ),
     _Rule(
         ("rainforest", "nature", "space", "dream", "float", "ethereal"),
@@ -169,6 +190,7 @@ _RULES: list[_Rule] = [
         0.4,
         ["dream pop", "ambient"],
         ["shimmering synths", "airy vocals"],
+        scene="drifting somewhere else",
     ),
 ]
 
@@ -254,7 +276,7 @@ def _detect_vocals(text: str) -> str:
         return "instrumental"
     if any(_contains(text, k) for k in ("female", "women", "woman", "girl")):
         return "female"
-    if any(_contains(text, k) for k in ("male vocal", "male artist", "men ", "guys")):
+    if any(_contains(text, k) for k in ("male vocal", "male vocals", "male artist", "men", "guys")):
         return "male"
     return "any"
 
@@ -289,17 +311,39 @@ def _sequence(candidates: list[Candidate]) -> list[Candidate]:
     return rising + falling
 
 
+def _article(word: str) -> str:
+    lowered = word.lower()
+    if lowered.startswith(("eu", "uni", "use")):
+        return "a"
+    return "an" if lowered[:1] in "aeiou" else "a"
+
+
 def _reason(row, intent: MusicalIntent) -> str:
-    genres = expand_genres(intent.genres)
+    """Short, varied, feature-grounded explanation for why a song was picked."""
     if any(a.lower() == row.artist.lower() for a in intent.reference_artists):
         return f"Straight from your reference: {row.artist}"
-    if row.genre in genres:
-        return f"{row.genre.title()} cut with a {_describe_energy(row.energy)} pulse"
+    energy = _describe_energy(row.energy)
+    mood = intent.moods[hash_text(row.title) % len(intent.moods)] if intent.moods else "the mood"
+    trait = intent.characteristics[0] if intent.characteristics else None
+    in_genre = row.genre in expand_genres(intent.genres)
+    options = [
+        f"{row.year} {row.genre} pick that leans {mood}",
+        f"{energy.capitalize()} {row.genre} that keeps the flow steady",
+        f"Adds {_article(mood)} {mood} color at {row.bpm} BPM",
+    ]
+    if row.popularity >= 80:
+        options.append(f"A familiar {row.genre} anchor with a {energy} pulse")
+    else:
+        options.append(f"A {row.genre} deep cut from {row.year}")
+    if trait and in_genre:
+        options.append(f"{row.genre.capitalize()} with {trait}")
     if row.valence < 0.3:
-        return f"Moody {_describe_energy(row.energy)} texture that fits the brief"
-    if row.valence > 0.7:
-        return f"Bright, {_describe_energy(row.energy)} lift for the mood"
-    return f"{_describe_energy(row.energy).capitalize()} energy that keeps the flow"
+        options.append(f"Wistful, {energy} texture for the quieter moments")
+    elif row.valence > 0.7:
+        options.append(f"Bright {row.genre} lift without breaking the mood")
+    if row.vocals == "instrumental":
+        options.append("Instrumental, so it stays out of your head")
+    return options[hash_text(row.artist + row.title) % len(options)]
 
 
 def _candidates_for(intent: MusicalIntent, count: int, exclude_ids: set[str] | None = None) -> list[Candidate]:
@@ -353,23 +397,31 @@ def interpret(prompt: str, *, energy_override: float | None = None, allow_explic
     references = [artist for artist in _ARTISTS if artist.lower() in text][:5]
 
     title = matched[0].title if matched else f"{genres[0].title()} Daydream"
+    scene = matched[0].scene if matched else "whatever you're doing"
     genre_text = ", ".join(genres[:3])
-    trait_text = f" with {traits[0]}" if traits else ""
-    vocal_text = {
-        "female": " Female voices lead the way.",
-        "male": " Male voices lead the way.",
-        "instrumental": " Mostly instrumental to keep your head clear.",
-        "mixed": "",
-        "any": "",
-    }[vocals]
+    mood_text = " and ".join(moods[:2])
+    trait_text = f", with {traits[0]}" if traits else ""
+    extras = []
+    if vocals == "female":
+        extras.append("Female voices lead the way.")
+    elif vocals == "male":
+        extras.append("Male voices lead the way.")
+    elif vocals == "instrumental":
+        extras.append("It stays mostly instrumental to keep your head clear.")
+    if era:
+        extras.append(f"Picks favor the {era} era.")
+    if not explicit_allowed:
+        extras.append("Everything is clean.")
     rationale = (
-        f"You asked for “{prompt.strip()}”, so I aimed for a {_describe_energy(energy)}, "
-        f"{moods[0]} feel{trait_text}. The picks lean on {genre_text} and are sequenced to ease in, "
-        f"build gently, then land softly.{vocal_text}"
+        f"Built for {scene}: a {_describe_energy(energy)}, {mood_text} mix{trait_text}. "
+        f"It leans on {genre_text} and is sequenced to ease in, build gently, then land softly. " + " ".join(extras)
+    ).strip()
+    description = (
+        f"{moods[0].capitalize()} {genres[0]}" + (f" and {genres[1]}" if len(genres) > 1 else "") + f" for {scene}."
     )
     return MusicalIntent(
         title=title,
-        description=f"{moods[0].capitalize()} {genres[0]} for {prompt.strip().rstrip('.').lower()[:60]}.",
+        description=description,
         moods=moods,
         genres=genres,
         characteristics=traits[:4] or ["cohesive sequencing", "a mix of anchors and deep cuts"],
