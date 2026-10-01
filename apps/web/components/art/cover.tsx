@@ -1,73 +1,94 @@
+"use client";
+
 import Image from "next/image";
+import { useState } from "react";
 
 import { coverArt } from "@/lib/mood";
 import { cn } from "@/lib/utils";
 
 /**
- * Album artwork. Uses Spotify artwork when available, otherwise a deterministic
- * generated cover so demo-mode tracks still look like a real library.
+ * Album artwork that fills its (positioned) parent. Uses real artwork when available and
+ * falls back to a deterministic generated cover if the URL is missing or fails to load.
  */
 export function Cover({
   src,
   seed,
   alt,
-  size,
+  sizes,
   className,
   priority,
 }: {
   src: string | null | undefined;
   seed: string;
   alt: string;
-  size: number;
+  /** next/image `sizes`, e.g. "56px" or "(min-width: 768px) 40vw, 90vw" */
+  sizes: string;
   className?: string;
   priority?: boolean;
 }) {
-  if (src) {
-    return (
-      <Image
-        src={src}
-        alt={alt}
-        width={size}
-        height={size}
-        priority={priority}
-        sizes={`${size}px`}
-        className={cn("aspect-square object-cover", className)}
-      />
-    );
-  }
+  const [failed, setFailed] = useState(false);
+  const showImage = Boolean(src) && !failed;
   const art = coverArt(seed);
+
   return (
     <div
-      role={alt ? "img" : undefined}
-      aria-label={alt || undefined}
-      aria-hidden={alt ? undefined : true}
-      className={cn("relative aspect-square overflow-hidden", className)}
-      style={{ background: art.background }}
+      className={cn("relative aspect-square overflow-hidden bg-ink-4", className)}
+      style={showImage ? undefined : { background: art.background }}
+      role={showImage || !alt ? undefined : "img"}
+      aria-label={showImage || !alt ? undefined : alt}
+      aria-hidden={!alt || undefined}
     >
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgb(255_255_255/0.18),transparent_45%)]" />
+      {showImage ? (
+        <Image
+          src={src!}
+          alt={alt}
+          fill
+          sizes={sizes}
+          priority={priority}
+          onError={() => setFailed(true)}
+          className="object-cover"
+        />
+      ) : null}
+      {/* Subtle sheen so covers read as physical objects */}
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgb(255_255_255/0.08),transparent_40%)]" />
     </div>
   );
 }
 
-/** 2×2 mosaic used for playlist covers. */
-export function Mosaic({
-  items,
-  size,
+/** Artist photograph with the editorial monochrome treatment (blooms to colour on hover). */
+export function Portrait({
+  src,
+  name,
+  sizes,
   className,
+  lit,
   priority,
 }: {
-  items: { src: string | null; seed: string }[];
-  size: number;
+  src: string | null | undefined;
+  name: string;
+  sizes: string;
   className?: string;
+  lit?: boolean;
   priority?: boolean;
 }) {
-  const cells = [...items];
-  while (cells.length < 4) cells.push({ src: null, seed: `empty-${cells.length}` });
+  const [failed, setFailed] = useState(false);
   return (
-    <div className={cn("grid aspect-square grid-cols-2 grid-rows-2 overflow-hidden", className)}>
-      {cells.slice(0, 4).map((cell, i) => (
-        <Cover key={i} src={cell.src} seed={cell.seed} alt="" size={Math.round(size / 2)} priority={priority} className="h-full w-full" />
-      ))}
+    <div className={cn("portrait", lit && "is-lit", className)}>
+      {src && !failed ? (
+        <Image
+          src={src}
+          alt={name}
+          fill
+          sizes={sizes}
+          priority={priority}
+          onError={() => setFailed(true)}
+          className="object-cover"
+        />
+      ) : (
+        <span className="absolute inset-0 grid place-items-center font-display text-[min(3rem,40%)] text-fg-faint" aria-label={name}>
+          {name.slice(0, 1)}
+        </span>
+      )}
     </div>
   );
 }

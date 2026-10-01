@@ -21,6 +21,7 @@ from app.schemas import (
 )
 from app.services.pipeline import PlaylistPipeline, compute_stats
 from app.services.spotify.base import SpotifyClient
+from app.services.spotify.catalog_scoring import CATALOG_BY_ID, artist_image_map, artwork_map
 
 router = APIRouter(prefix="/playlists", tags=["playlists"])
 PipelineDep = Annotated[PlaylistPipeline, Depends(get_pipeline)]
@@ -31,7 +32,23 @@ SpotifyDep = Annotated[SpotifyClient, Depends(get_spotify)]
 
 
 def _tracks(playlist: Playlist) -> list[Track]:
-    return [Track(**row.data) for row in playlist.tracks]
+    return [_with_current_artwork(Track(**row.data)) for row in playlist.tracks]
+
+
+def _with_current_artwork(track: Track) -> Track:
+    """Demo-catalog tracks always show the latest committed artwork, so playlists saved
+    before artwork existed (or before a fix) pick it up without a migration."""
+    if not track.id.startswith("demo_"):
+        return track
+    cover = artwork_map().get(track.id)
+    row = CATALOG_BY_ID.get(track.id)
+    portrait = artist_image_map().get(row.artist) if row else None
+    return track.model_copy(
+        update={
+            "image_url": cover or track.image_url,
+            "artist_images": [portrait] if portrait else track.artist_images,
+        }
+    )
 
 
 def _set_tracks(playlist: Playlist, tracks: list[Track]) -> None:

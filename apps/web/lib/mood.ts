@@ -11,7 +11,8 @@ export function moodColors(energy: number, valence: number): { a: string; b: str
   // 250 (indigo) → 320 (magenta) → 395 (≈35, amber)
   const hueA = 250 + v * 145;
   const hueB = hueA + 35 + e * 20;
-  const chroma = 0.12 + e * 0.1;
+  // Restrained on purpose: the atmosphere should tint, never shout.
+  const chroma = 0.07 + e * 0.06;
   const light = 0.62 + e * 0.08;
   return {
     a: `oklch(${(light - 0.04).toFixed(3)} ${chroma.toFixed(3)} ${(hueA % 360).toFixed(1)})`,

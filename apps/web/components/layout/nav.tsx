@@ -1,16 +1,17 @@
 "use client";
 
-import { LogOut, Menu, X } from "lucide-react";
+import { LogOut, Menu as MenuIcon, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Logo, SpotifyGlyph } from "@/components/layout/logo";
 import { Button, buttonClasses } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/primitives";
+import { Popover, PopoverContent, PopoverTrigger, Skeleton } from "@/components/ui/primitives";
 import { useConfig, useDemoLogin, useLogout, useMe } from "@/lib/api/hooks";
+import { EASE } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
 const LINKS = [
@@ -19,119 +20,187 @@ const LINKS = [
   { href: "/about", label: "How it works" },
 ];
 
-function AuthControls({ onDone }: { onDone?: () => void }) {
+function StatusDot({ tone }: { tone: "live" | "demo" | "off" }) {
+  return (
+    <span className="relative flex size-2">
+      {tone !== "off" ? (
+        <span
+          className={cn(
+            "absolute inline-flex size-full animate-ping rounded-full opacity-50 [animation-duration:2.4s]",
+            tone === "live" ? "bg-moss" : "bg-amber",
+          )}
+        />
+      ) : null}
+      <span className={cn("relative inline-flex size-2 rounded-full", tone === "live" ? "bg-moss" : tone === "demo" ? "bg-amber" : "bg-fg-faint")} />
+    </span>
+  );
+}
+
+/** Spotify connection status + account actions, all in one understated chip. */
+function StatusChip({ onDone }: { onDone?: () => void }) {
   const { data: me, isLoading } = useMe();
   const { data: config } = useConfig();
   const demo = useDemoLogin();
   const logout = useLogout();
   const router = useRouter();
 
-  if (isLoading) return <Skeleton className="h-9 w-28 rounded-full" />;
+  if (isLoading || !config) return <Skeleton className="h-9 w-32 rounded-full" />;
 
-  if (me) {
+  const signOut = () =>
+    logout.mutate(undefined, {
+      onSuccess: () => {
+        onDone?.();
+        router.push("/");
+        toast("Signed out");
+      },
+    });
+
+  if (!me) {
     return (
-      <div className="flex items-center gap-2">
-        <span className="flex items-center gap-2 rounded-full bg-white/[0.05] py-1 pr-3 pl-1 text-sm">
-          {me.avatar_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={me.avatar_url} alt="" className="size-7 rounded-full object-cover" />
-          ) : (
-            <span className="mood-ring grid size-7 place-items-center rounded-full text-xs font-semibold text-white">
-              {me.display_name.slice(0, 1).toUpperCase()}
-            </span>
-          )}
-          <span className="max-w-[9rem] truncate">{me.display_name}</span>
-        </span>
+      <div className="flex items-center gap-1.5">
+        {config.spotify_enabled ? (
+          <a href="/api/auth/login" className={buttonClasses("solid", "sm")}>
+            <SpotifyGlyph className="size-4" /> Connect Spotify
+          </a>
+        ) : null}
         <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Sign out"
-          title="Sign out"
+          variant={config.spotify_enabled ? "ghost" : "solid"}
+          size="sm"
+          loading={demo.isPending}
           onClick={() =>
-            logout.mutate(undefined, {
+            demo.mutate(undefined, {
               onSuccess: () => {
                 onDone?.();
-                router.push("/");
-                toast("Signed out");
+                router.push("/generate");
               },
+              onError: (e) => toast.error(e.message),
             })
           }
         >
-          <LogOut className="size-4" />
+          Try the demo
         </Button>
       </div>
     );
   }
 
+  const live = !me.is_demo;
   return (
-    <div className="flex items-center gap-2">
-      {config?.spotify_enabled ? (
-        <a href="/api/auth/login" className={buttonClasses("primary", "md")}>
-          <SpotifyGlyph className="size-4" />
-          Connect Spotify
-        </a>
-      ) : null}
-      <Button
-        variant={config?.spotify_enabled ? "ghost" : "primary"}
-        loading={demo.isPending}
-        onClick={() =>
-          demo.mutate(undefined, {
-            onSuccess: () => {
-              onDone?.();
-              router.push("/generate");
-            },
-            onError: (e) => toast.error(e.message),
-          })
-        }
-      >
-        Try the demo
-      </Button>
-    </div>
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          className="flex h-9 items-center gap-2.5 rounded-full border border-line-strong py-1 pr-1 pl-3.5 text-[13px] text-fg-muted transition hover:border-fg-faint hover:text-fg"
+          aria-label={live ? "Spotify connected. Account menu" : "Demo mode. Account menu"}
+        >
+          <StatusDot tone={live ? "live" : "demo"} />
+          {live ? "Spotify" : "Demo mode"}
+          {me.avatar_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={me.avatar_url} alt="" className="size-7 rounded-full object-cover" />
+          ) : (
+            <span className="grid size-7 place-items-center rounded-full bg-ink-4 font-display text-sm text-fg">
+              {me.display_name.slice(0, 1).toUpperCase()}
+            </span>
+          )}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80">
+        <p className="font-display text-lg font-light">{me.display_name}</p>
+        <dl className="mt-3 space-y-2 text-[13px]">
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-fg-subtle">Music</dt>
+            <dd className="flex items-center gap-2 text-fg">
+              <StatusDot tone={live ? "live" : "demo"} />
+              {live ? "Spotify connected" : "Sample catalog (290+ songs)"}
+            </dd>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <dt className="text-fg-subtle">Curator</dt>
+            <dd className="text-fg">{config.ai_enabled ? config.ai_model : "Offline curator"}</dd>
+          </div>
+        </dl>
+        {!live ? (
+          <p className="mt-3 text-xs leading-relaxed text-fg-subtle">
+            Demo mode uses real songs and artwork without touching your Spotify account.{" "}
+            <Link href="/about#setup" className="text-fg-muted underline underline-offset-2 hover:text-fg" onClick={onDone}>
+              Connect real services
+            </Link>
+          </p>
+        ) : null}
+        <div className="mt-4 flex gap-2 border-t border-line pt-4">
+          {!live && config.spotify_enabled ? (
+            <a href="/api/auth/login" className={buttonClasses("solid", "sm")}>
+              <SpotifyGlyph className="size-4" /> Connect Spotify
+            </a>
+          ) : null}
+          <Button variant="ghost" size="sm" onClick={signOut}>
+            <LogOut className="size-3.5" /> Sign out
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
 export function Nav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => setOpen(false), [pathname]);
 
   return (
-    <header className="fixed inset-x-0 top-0 z-40">
-      <div className="mx-auto mt-3 max-w-6xl px-3 sm:px-4">
-        <nav
-          aria-label="Main"
-          className="glass flex h-14 items-center justify-between rounded-full pr-2 pl-4 sm:pl-5"
-        >
-          <Link href="/" aria-label="Moodwave home" className="rounded-lg">
-            <Logo />
-          </Link>
-          <ul className="hidden items-center gap-1 md:flex">
-            {LINKS.map((link) => {
-              const active = pathname.startsWith(link.href);
-              return (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    aria-current={active ? "page" : undefined}
-                    className={cn(
-                      "relative rounded-full px-4 py-2 text-sm transition-colors",
-                      active ? "text-fg" : "text-fg-muted hover:text-fg",
-                    )}
-                  >
-                    {active ? (
-                      <motion.span
-                        layoutId="nav-pill"
-                        className="absolute inset-0 rounded-full bg-white/[0.08]"
-                        transition={{ type: "spring", stiffness: 400, damping: 32 }}
-                      />
-                    ) : null}
-                    <span className="relative">{link.label}</span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-          <div className="hidden md:block">
-            <AuthControls />
+    <header className="fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-5 sm:pt-4">
+      <motion.nav
+        aria-label="Main"
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 0.8, ease: EASE }}
+        className={cn(
+          "mx-auto flex h-[3.25rem] max-w-5xl items-center justify-between rounded-full pr-2 pl-4 transition-[background-color,border-color,box-shadow] duration-500",
+          scrolled || open ? "chrome" : "border border-transparent",
+        )}
+      >
+        <Link href="/" aria-label="Moodwave home" className="rounded-full">
+          <Logo />
+        </Link>
+
+        <ul className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 md:flex">
+          {LINKS.map((link) => {
+            const active = pathname.startsWith(link.href);
+            return (
+              <li key={link.href}>
+                <Link
+                  href={link.href}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "relative rounded-full px-3.5 py-1.5 text-[13.5px] transition-colors duration-300",
+                    active ? "text-fg" : "text-fg-subtle hover:text-fg",
+                  )}
+                >
+                  {link.label}
+                  {active ? (
+                    <motion.span
+                      layoutId="nav-underline"
+                      className="absolute inset-x-3.5 -bottom-0.5 h-px bg-lilac"
+                      transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                    />
+                  ) : null}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+
+        <div className="flex items-center gap-1">
+          <div className="hidden sm:block">
+            <StatusChip />
           </div>
           <Button
             variant="ghost"
@@ -141,38 +210,38 @@ export function Nav() {
             aria-expanded={open}
             onClick={() => setOpen((o) => !o)}
           >
-            {open ? <X className="size-5" /> : <Menu className="size-5" />}
+            {open ? <X className="size-5" /> : <MenuIcon className="size-5" />}
           </Button>
-        </nav>
+        </div>
+      </motion.nav>
 
-        <AnimatePresence>
-          {open ? (
-            <motion.div
-              initial={{ opacity: 0, y: -8, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -8, scale: 0.98 }}
-              className="glass-strong mt-2 rounded-3xl p-3 md:hidden"
-            >
-              <ul className="flex flex-col">
-                {LINKS.map((link) => (
-                  <li key={link.href}>
-                    <Link
-                      href={link.href}
-                      onClick={() => setOpen(false)}
-                      className="block rounded-2xl px-4 py-3 text-base text-fg-muted hover:bg-white/5 hover:text-fg"
-                    >
-                      {link.label}
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-2 border-t border-line px-2 pt-3">
-                <AuthControls onDone={() => setOpen(false)} />
-              </div>
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
-      </div>
+      <AnimatePresence>
+        {open ? (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.35, ease: EASE }}
+            className="chrome mx-auto mt-2 max-w-5xl rounded-[1.75rem] p-3 md:hidden"
+          >
+            <ul>
+              {LINKS.map((link) => (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    className="block rounded-2xl px-4 py-3 font-display text-2xl font-light text-fg-muted hover:bg-white/[0.04] hover:text-fg"
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-2 border-t border-line px-2 pt-3 pb-1">
+              <StatusChip onDone={() => setOpen(false)} />
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </header>
   );
 }

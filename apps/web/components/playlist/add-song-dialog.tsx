@@ -49,7 +49,7 @@ export function AddSongDialog({
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Song or artist"
           aria-label="Search songs"
-          className="h-11 w-full rounded-full border border-line-strong bg-ink/60 pr-4 pl-10 text-sm outline-none focus:border-[var(--mood-b)]/60"
+          className="h-12 w-full rounded-full border border-line-strong bg-ink/60 pr-4 pl-10 text-[15px] outline-none focus:border-lilac/50"
         />
       </div>
       <div className="mt-4 min-h-48 overflow-y-auto">
@@ -82,7 +82,7 @@ export function AddSongDialog({
                     }
                     className="flex w-full items-center gap-3 rounded-2xl p-2 text-left transition hover:bg-white/[0.06] disabled:opacity-60"
                   >
-                    <Cover src={track.image_url} seed={track.album} alt="" size={40} className="size-10 rounded-lg" />
+                    <Cover src={track.image_url} seed={track.album} alt="" sizes="40px" className="size-10 shrink-0 rounded-lg" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium">{track.title}</span>
                       <span className="block truncate text-xs text-fg-subtle">

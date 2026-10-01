@@ -7,6 +7,9 @@ export interface Track {
   uri: string;
   title: string;
   artists: string[];
+  artist_ids?: string[];
+  /** Portrait per artist (same order as `artists`), when known. */
+  artist_images?: (string | null)[];
   album: string;
   image_url: string | null;
   duration_ms: number;
@@ -113,4 +116,19 @@ export interface GenerateInput {
   energy: number | null;
   allow_explicit: boolean;
   use_my_taste: boolean;
+}
+
+export interface FeaturedArtist {
+  name: string;
+  image_url: string;
+  genre: string;
+  track_count: number;
+  top_track: string;
+  album: string;
+  cover_url: string | null;
+}
+
+export interface Featured {
+  tracks: Track[];
+  artists: FeaturedArtist[];
 }

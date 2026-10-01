@@ -15,6 +15,9 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "i.scdn.co" },
       { protocol: "https", hostname: "mosaic.scdn.co" },
       { protocol: "https", hostname: "*.spotifycdn.com" },
+      // Demo catalog artwork (fetched once by apps/api/scripts/fetch_artwork.py)
+      { protocol: "https", hostname: "*.dzcdn.net" },
+      { protocol: "https", hostname: "*.mzstatic.com" },
     ],
   },
   experimental: {

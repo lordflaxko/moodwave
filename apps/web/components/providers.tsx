@@ -30,14 +30,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <Toaster
           theme="dark"
           position="bottom-center"
-          offset={96}
+          offset={176}
           toastOptions={{
             style: {
-              background: "rgb(20 20 28 / 0.88)",
-              border: "1px solid rgb(255 255 255 / 0.12)",
-              backdropFilter: "blur(20px) saturate(150%)",
-              color: "#f4f3f7",
-              borderRadius: "1rem",
+              background: "rgb(22 20 26 / 0.92)",
+              border: "1px solid rgb(242 239 233 / 0.13)",
+              backdropFilter: "blur(22px) saturate(140%)",
+              color: "#f2efe9",
+              borderRadius: "1.1rem",
+              fontFamily: "var(--font-inter-tight)",
             },
           }}
         />

@@ -47,6 +47,9 @@ class MockSpotifyClient:
             for row in rows
         ]
 
+    async def attach_artist_images(self, tracks: list[Track]) -> list[Track]:
+        return tracks  # catalog tracks already carry portraits
+
     async def top_artists(self, limit: int = 10) -> list[str]:
         return ["Phoebe Bridgers", "Tame Impala", "SZA", "Frank Ocean", "Daft Punk"][:limit]
 

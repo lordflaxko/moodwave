@@ -12,7 +12,13 @@ from typing import Literal
 
 from app.data.catalog import CATALOG
 from app.schemas import Candidate, MusicalIntent, PlaylistPlan, RefinementPlan, Track
-from app.services.spotify.catalog_scoring import CATALOG_BY_ID, catalog_id, expand_genres, rank_catalog
+from app.services.spotify.catalog_scoring import (
+    CATALOG_BY_ID,
+    DEEP_CUTS_TRAIT,
+    catalog_id,
+    expand_genres,
+    rank_catalog,
+)
 
 
 def hash_text(text: str) -> int:
@@ -346,8 +352,10 @@ def _reason(row, intent: MusicalIntent) -> str:
     return options[hash_text(row.artist + row.title) % len(options)]
 
 
-def _candidates_for(intent: MusicalIntent, count: int, exclude_ids: set[str] | None = None) -> list[Candidate]:
-    rows = rank_catalog(intent, exclude_ids)
+def _candidates_for(
+    intent: MusicalIntent, count: int, exclude_ids: set[str] | None = None, artists: set[str] | None = None
+) -> list[Candidate]:
+    rows = rank_catalog(intent, exclude_ids, artists)
     picked, per_artist = [], {}
     for row in rows:
         if per_artist.get(row.artist, 0) >= 2:
@@ -500,6 +508,18 @@ class HeuristicProvider:
             swap = [t for t in tracks if _track_vocals(t) in opposite]
             remove |= {t.id for t in swap[: max(4, len(swap) // 2)]}
             changes.append(f"featured more {vocals} {'tracks' if vocals == 'instrumental' else 'artists'}")
+        if any(_contains(text, k) for k in ("nostalg*", "throwback*", "older", "classic*", "retro", "oldies")):
+            new.era = "classic"
+            newest = sorted((t for t in tracks if (t.release_year or 0) >= 2015), key=lambda t: -(t.release_year or 0))
+            remove |= {t.id for t in newest[: max(3, len(tracks) // 3)]}
+            changes.append("leaned nostalgic")
+        deep_cut_words = ("less mainstream", "deep cut*", "obscure", "underground", "lesser-known", "hidden gem*")
+        if any(_contains(text, k) for k in deep_cut_words):
+            if DEEP_CUTS_TRAIT not in new.characteristics:
+                new.characteristics = [*new.characteristics, DEEP_CUTS_TRAIT]
+            hits = sorted((t for t in tracks if (t.popularity or 0) >= 82), key=lambda t: -(t.popularity or 0))
+            remove |= {t.id for t in hits[: max(3, len(tracks) // 3)]}
+            changes.append("swapped hits for deeper cuts")
         genres = _detect_genres(text)
         if genres:
             new.genres = genres + [g for g in intent.genres if g not in genres]
@@ -530,7 +550,15 @@ class HeuristicProvider:
         new.rationale = f"{intent.rationale.split(' Update:')[0]} Update: {', '.join(changes)} per your note “{instruction.strip()}”."
         add_count = max(0, len(remove) + size_delta) + 4
         # Exclude everything currently in the playlist, including songs being removed.
-        candidates = _candidates_for(new, add_count, {t.id for t in tracks})
+        current_ids = {t.id for t in tracks}
+        candidates: list[Candidate] = []
+        if any(_contains(text, k) for k in ("same artists", "same artist", "keep the artists")):
+            line_up = {t.artists[0] for t in tracks if t.id not in remove and t.artists}
+            candidates = _candidates_for(new, add_count, current_ids, artists=line_up)
+        if len(candidates) < add_count:
+            picked = {(c.title, c.artist) for c in candidates}
+            taken = {catalog_id(r) for r in CATALOG if (r.title, r.artist) in picked}
+            candidates += _candidates_for(new, add_count - len(candidates), current_ids | taken)
         summary = f"I {', '.join(changes)}."
         summary = summary[0].upper() + summary[1:]
         return RefinementPlan(

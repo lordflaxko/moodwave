@@ -1,29 +1,39 @@
 "use client";
 
 import * as RadixDialog from "@radix-ui/react-dialog";
-import * as RadixSlider from "@radix-ui/react-slider";
+import * as RadixDropdown from "@radix-ui/react-dropdown-menu";
+import * as RadixPopover from "@radix-ui/react-popover";
 import * as RadixSwitch from "@radix-ui/react-switch";
 import { X } from "lucide-react";
+import { motion, type HTMLMotionProps } from "motion/react";
 
+import { EASE, fadeUp, stagger } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
-export function Chip({
+/* --- Text ----------------------------------------------------------------------- */
+
+export function Eyebrow({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <p className={cn("eyebrow", className)}>{children}</p>;
+}
+
+/* --- Pill ------------------------------------------------------------------------ */
+
+export function Pill({
   children,
   className,
   tone = "default",
 }: {
   children: React.ReactNode;
   className?: string;
-  tone?: "default" | "mood" | "outline";
+  tone?: "default" | "outline" | "accent";
 }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium",
-        tone === "default" && "bg-white/[0.07] text-fg-muted",
-        tone === "mood" &&
-          "border border-[color-mix(in_oklab,var(--mood-b)_35%,transparent)] bg-[color-mix(in_oklab,var(--mood-a)_18%,transparent)] text-[color-mix(in_oklab,var(--mood-b)_45%,white)]",
-        tone === "outline" && "border border-line text-fg-muted",
+        "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[13px]",
+        tone === "default" && "bg-white/[0.05] text-fg-muted",
+        tone === "outline" && "border border-line-strong text-fg-muted",
+        tone === "accent" && "bg-lilac/12 text-lilac",
         className,
       )}
     >
@@ -33,45 +43,113 @@ export function Chip({
 }
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div aria-hidden className={cn("skeleton rounded-lg", className)} />;
+  return <div aria-hidden className={cn("skeleton rounded-xl", className)} />;
 }
 
-export function Slider({
+/* --- Reveal-on-scroll -------------------------------------------------------------- */
+
+export function Reveal({
+  children,
+  className,
+  delay = 0,
+  as = "div",
+  ...rest
+}: {
+  children: React.ReactNode;
+  className?: string;
+  delay?: number;
+  as?: "div" | "section" | "li";
+} & Omit<HTMLMotionProps<"div">, "children">) {
+  const Component = motion[as] as typeof motion.div;
+  return (
+    <Component
+      className={className}
+      initial={{ opacity: 0, y: 28, filter: "blur(6px)" }}
+      whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+      viewport={{ once: true, margin: "-80px" }}
+      transition={{ duration: 0.9, ease: EASE, delay }}
+      {...rest}
+    >
+      {children}
+    </Component>
+  );
+}
+
+/** Staggered reveal: wrap items in <RevealGroup> and give each child `variants={fadeUp}`. */
+export function RevealGroup({
+  children,
+  className,
+  step = 0.07,
+  as = "div",
+}: {
+  children: React.ReactNode;
+  className?: string;
+  step?: number;
+  as?: "div" | "ul" | "ol";
+}) {
+  const Component = motion[as] as typeof motion.div;
+  return (
+    <Component
+      className={className}
+      variants={stagger(step)}
+      initial="hidden"
+      whileInView="show"
+      viewport={{ once: true, margin: "-60px" }}
+    >
+      {children}
+    </Component>
+  );
+}
+
+export { fadeUp };
+
+/* --- Segmented control -------------------------------------------------------------- */
+
+export function Segmented<T extends string>({
   value,
+  options,
   onChange,
-  min,
-  max,
-  step = 1,
   label,
   className,
 }: {
-  value: number;
-  onChange: (value: number) => void;
-  min: number;
-  max: number;
-  step?: number;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (value: T) => void;
   label: string;
   className?: string;
 }) {
   return (
-    <RadixSlider.Root
-      className={cn("relative flex h-5 w-full touch-none items-center select-none", className)}
-      value={[value]}
-      min={min}
-      max={max}
-      step={step}
-      onValueChange={([v]) => onChange(v)}
-    >
-      <RadixSlider.Track className="relative h-1.5 grow overflow-hidden rounded-full bg-white/10">
-        <RadixSlider.Range className="mood-ring absolute h-full rounded-full" />
-      </RadixSlider.Track>
-      <RadixSlider.Thumb
-        aria-label={label}
-        className="block size-4 rounded-full bg-white shadow-[0_0_0_4px_rgb(255_255_255/0.12),0_4px_14px_rgb(0_0_0/0.5)] transition-transform hover:scale-110 focus-visible:scale-110"
-      />
-    </RadixSlider.Root>
+    <div role="radiogroup" aria-label={label} className={cn("flex rounded-full bg-white/[0.04] p-1", className)}>
+      {options.map((option) => {
+        const active = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(option.value)}
+            className={cn(
+              "relative rounded-full px-3 py-1.5 text-[13px] transition-colors duration-300",
+              active ? "text-ink" : "text-fg-subtle hover:text-fg",
+            )}
+          >
+            {active ? (
+              <motion.span
+                layoutId={`seg-${label}`}
+                className="absolute inset-0 rounded-full bg-fg"
+                transition={{ type: "spring", stiffness: 420, damping: 34 }}
+              />
+            ) : null}
+            <span className="relative">{option.label}</span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
+
+/* --- Switch --------------------------------------------------------------------------- */
 
 export function Switch({
   checked,
@@ -88,7 +166,7 @@ export function Switch({
 }) {
   const id = `switch-${label.replace(/\W+/g, "-").toLowerCase()}`;
   return (
-    <div className={cn("flex items-center justify-between gap-4", disabled && "opacity-50")}>
+    <div className={cn("flex items-center justify-between gap-4", disabled && "opacity-40")}>
       <label htmlFor={id} className="min-w-0 cursor-pointer">
         <span className="block text-sm text-fg">{label}</span>
         {description ? <span className="block text-xs text-fg-subtle">{description}</span> : null}
@@ -98,13 +176,15 @@ export function Switch({
         checked={checked}
         onCheckedChange={onChange}
         disabled={disabled}
-        className="relative h-6 w-11 shrink-0 rounded-full bg-white/12 transition-colors data-[state=checked]:bg-[var(--mood-a)]"
+        className="relative h-6 w-10 shrink-0 rounded-full bg-white/10 transition-colors duration-300 data-[state=checked]:bg-lilac"
       >
-        <RadixSwitch.Thumb className="block size-5 translate-x-0.5 rounded-full bg-white shadow transition-transform data-[state=checked]:translate-x-[22px]" />
+        <RadixSwitch.Thumb className="block size-[18px] translate-x-[3px] rounded-full bg-fg shadow transition-transform duration-300 data-[state=checked]:translate-x-[19px] data-[state=checked]:bg-ink" />
       </RadixSwitch.Root>
     </div>
   );
 }
+
+/* --- Dialog ---------------------------------------------------------------------------- */
 
 export function Dialog({
   open,
@@ -124,23 +204,23 @@ export function Dialog({
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm" />
+        <RadixDialog.Overlay className="fixed inset-0 z-[80] bg-ink/70 backdrop-blur-md" />
         <RadixDialog.Content
           className={cn(
-            "glass-strong fixed top-1/2 left-1/2 z-50 w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-xl3 p-6",
+            "surface fixed top-1/2 left-1/2 z-[80] w-[calc(100vw-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 rounded-[1.75rem] p-7",
             "flex max-h-[85dvh] flex-col focus:outline-none",
             className,
           )}
         >
-          <div className="mb-4 flex items-start justify-between gap-4">
+          <div className="mb-5 flex items-start justify-between gap-4">
             <div>
-              <RadixDialog.Title className="text-lg font-semibold tracking-tight">{title}</RadixDialog.Title>
-              <RadixDialog.Description className={description ? "mt-1 text-sm text-fg-muted" : "sr-only"}>
+              <RadixDialog.Title className="font-display text-2xl font-light tracking-tight">{title}</RadixDialog.Title>
+              <RadixDialog.Description className={description ? "mt-1.5 text-sm text-fg-muted" : "sr-only"}>
                 {description ?? title}
               </RadixDialog.Description>
             </div>
             <RadixDialog.Close
-              className="rounded-full p-1.5 text-fg-muted transition hover:bg-white/10 hover:text-fg"
+              className="rounded-full p-2 text-fg-subtle transition hover:bg-white/5 hover:text-fg"
               aria-label="Close"
             >
               <X className="size-4" />
@@ -150,5 +230,70 @@ export function Dialog({
         </RadixDialog.Content>
       </RadixDialog.Portal>
     </RadixDialog.Root>
+  );
+}
+
+/* --- Menu & popover ---------------------------------------------------------------------- */
+
+const floatingPanel =
+  "chrome z-[75] min-w-48 rounded-2xl p-1.5 text-sm outline-none data-[state=open]:animate-in";
+
+export const Menu = RadixDropdown.Root;
+export const MenuTrigger = RadixDropdown.Trigger;
+
+export function MenuContent({ children, align = "end" }: { children: React.ReactNode; align?: "start" | "end" }) {
+  return (
+    <RadixDropdown.Portal>
+      <RadixDropdown.Content align={align} sideOffset={8} className={floatingPanel}>
+        {children}
+      </RadixDropdown.Content>
+    </RadixDropdown.Portal>
+  );
+}
+
+export function MenuItem({
+  children,
+  onSelect,
+  danger,
+}: {
+  children: React.ReactNode;
+  onSelect: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <RadixDropdown.Item
+      onSelect={onSelect}
+      className={cn(
+        "flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 outline-none data-[highlighted]:bg-white/[0.06]",
+        danger ? "text-rose" : "text-fg-muted data-[highlighted]:text-fg",
+      )}
+    >
+      {children}
+    </RadixDropdown.Item>
+  );
+}
+
+export const Popover = RadixPopover.Root;
+export const PopoverTrigger = RadixPopover.Trigger;
+
+export function PopoverContent({
+  children,
+  className,
+  side = "bottom",
+  align = "end",
+}: {
+  children: React.ReactNode;
+  className?: string;
+  side?: "top" | "bottom";
+  align?: "start" | "center" | "end";
+}) {
+  return (
+    <RadixPopover.Portal>
+      <RadixPopover.Content side={side} align={align} sideOffset={10} className={cn(floatingPanel, "p-4", className)}>
+        <motion.div initial={{ opacity: 0, y: side === "top" ? 6 : -6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: EASE }}>
+          {children}
+        </motion.div>
+      </RadixPopover.Content>
+    </RadixPopover.Portal>
   );
 }

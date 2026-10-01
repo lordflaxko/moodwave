@@ -36,7 +36,7 @@ export function AuthDialog() {
       description="Sign in with Spotify to save playlists to your account, or explore with the demo catalog."
     >
       <div className="flex flex-col gap-3">
-        <a href="/api/auth/login" className={buttonClasses("primary", "lg", "w-full")}>
+        <a href="/api/auth/login" className={buttonClasses("solid", "lg", "w-full")}>
           <SpotifyGlyph className="size-5" />
           Continue with Spotify
         </a>

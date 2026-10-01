@@ -16,6 +16,8 @@ class Track(BaseModel):
     uri: str
     title: str
     artists: list[str]
+    artist_ids: list[str] = Field(default_factory=list)
+    artist_images: list[str | None] = Field(default_factory=list, description="Portrait per artist, same order")
     album: str
     image_url: str | None = None
     duration_ms: int
@@ -158,6 +160,24 @@ class AppConfigOut(BaseModel):
     spotify_enabled: bool
     ai_enabled: bool
     ai_model: str | None
+
+
+class FeaturedArtist(BaseModel):
+    name: str
+    image_url: str
+    genre: str
+    track_count: int
+    # Their most recognisable record in the catalog
+    top_track: str
+    album: str
+    cover_url: str | None
+
+
+class FeaturedOut(BaseModel):
+    """Public showcase data for marketing surfaces (hero, mood cards, artist band)."""
+
+    tracks: list[Track]
+    artists: list[FeaturedArtist]
 
 
 class SpotifyPlaylistOut(BaseModel):

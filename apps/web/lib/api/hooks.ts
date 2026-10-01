@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "./client";
 import type {
   AppConfig,
+  Featured,
   GenerateInput,
   Playlist,
   PlaylistSummary,
@@ -20,7 +21,20 @@ export const keys = {
   playlist: (id: string) => ["playlist", id] as const,
   search: (q: string) => ["search", q] as const,
   spotifyPlaylists: ["spotify-playlists"] as const,
+  featured: ["featured"] as const,
 };
+
+// --- Showcase -------------------------------------------------------------------------
+
+/** Real artwork + artist portraits for marketing surfaces. Public, cached for the session. */
+export function useFeatured() {
+  return useQuery({
+    queryKey: keys.featured,
+    queryFn: () => api<Featured>("/catalog/featured"),
+    staleTime: Infinity,
+    retry: 1,
+  });
+}
 
 // --- Session --------------------------------------------------------------------------
 
@@ -78,9 +92,10 @@ export function useGenerate() {
 }
 
 /** Shared mutation plumbing: write the returned playlist into the cache. */
-function usePlaylistMutation<TVars>(id: string, fn: (vars: TVars) => Promise<Playlist>) {
+function usePlaylistMutation<TVars>(id: string, fn: (vars: TVars) => Promise<Playlist>, mutationKey?: unknown[]) {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey,
     mutationFn: fn,
     onSuccess: (playlist) => {
       qc.setQueryData(keys.playlist(id), playlist);
@@ -96,7 +111,10 @@ export function useRefine(id: string) {
 }
 
 export function useRegenerate(id: string) {
-  return usePlaylistMutation(id, () => api<Playlist>(`/playlists/${id}/regenerate`, { method: "POST" }));
+  return usePlaylistMutation(id, () => api<Playlist>(`/playlists/${id}/regenerate`, { method: "POST" }), [
+    "regenerate",
+    id,
+  ]);
 }
 
 export function useReplaceTrack(id: string) {

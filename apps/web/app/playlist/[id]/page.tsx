@@ -1,6 +1,8 @@
 "use client";
 
-import { AlertTriangle, ArrowLeft, Music2 } from "lucide-react";
+import { useIsMutating } from "@tanstack/react-query";
+import { AlertTriangle, ArrowLeft, Disc3 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -8,9 +10,10 @@ import { toast } from "sonner";
 
 import { useAuthDialog } from "@/components/layout/auth-dialog";
 import { AddSongDialog } from "@/components/playlist/add-song-dialog";
-import { IntentPanel } from "@/components/playlist/intent-panel";
+import { Featuring } from "@/components/playlist/featuring";
+import { LinerNotes } from "@/components/playlist/liner-notes";
 import { PlaylistHero } from "@/components/playlist/playlist-hero";
-import { RefineBar, RefinePanel } from "@/components/playlist/refine-dock";
+import { RefineComposer } from "@/components/playlist/refine-composer";
 import { TrackList } from "@/components/playlist/track-list";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/primitives";
@@ -20,32 +23,30 @@ import { useMoodTheme } from "@/lib/use-mood-theme";
 
 function PlaylistSkeleton() {
   return (
-    <div className="mx-auto max-w-6xl px-4 pt-10" aria-busy="true" aria-label="Loading playlist">
-      <div className="flex flex-col gap-8 sm:flex-row sm:items-end">
-        <Skeleton className="size-44 rounded-3xl sm:size-60" />
-        <div className="flex-1 space-y-4">
-          <Skeleton className="h-3 w-32" />
-          <Skeleton className="h-12 w-3/4" />
-          <Skeleton className="h-4 w-1/2" />
-          <div className="flex gap-2 pt-4">
-            <Skeleton className="h-12 w-28 rounded-full" />
-            <Skeleton className="h-12 w-40 rounded-full" />
+    <div className="mx-auto max-w-6xl px-5 pt-32" aria-busy="true" aria-label="Loading playlist">
+      <div className="grid items-end gap-12 lg:grid-cols-[27rem_1fr]">
+        <Skeleton className="aspect-square w-full rounded-3xl" />
+        <div className="space-y-5">
+          <Skeleton className="h-3 w-48" />
+          <Skeleton className="h-20 w-4/5" />
+          <Skeleton className="h-4 w-2/3" />
+          <div className="grid grid-cols-4 gap-6 pt-6">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-12" />
+            ))}
           </div>
         </div>
       </div>
-      <div className="mt-12 grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className="space-y-2">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-3 p-2">
-              <Skeleton className="size-11 rounded-xl" />
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-3.5 w-1/3" />
-                <Skeleton className="h-3 w-1/4" />
-              </div>
+      <div className="mt-24 space-y-3">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-4 p-2">
+            <Skeleton className="size-14 rounded-xl" />
+            <div className="flex-1 space-y-2">
+              <Skeleton className="h-3.5 w-1/3" />
+              <Skeleton className="h-3 w-1/4" />
             </div>
-          ))}
-        </div>
-        <Skeleton className="hidden h-96 rounded-xl3 lg:block" />
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -54,22 +55,43 @@ function PlaylistSkeleton() {
 function ErrorState({ error, onRetry }: { error: Error; onRetry: () => void }) {
   const showAuth = useAuthDialog((s) => s.show);
   const status = error instanceof ApiError ? error.status : 0;
-
   const content =
     status === 401
-      ? { title: "Sign in to see this playlist", body: "Your session ended or you haven't connected yet.", action: <Button variant="primary" onClick={() => showAuth(onRetry)}>Sign in</Button> }
+      ? {
+          title: "Sign in to hear this one",
+          body: "Your session ended, or you haven't connected yet.",
+          action: (
+            <Button variant="solid" onClick={() => showAuth(onRetry)}>
+              Sign in
+            </Button>
+          ),
+        }
       : status === 404
-        ? { title: "This playlist doesn't exist", body: "It may have been deleted, or it belongs to another account.", action: <Link href="/generate" className={buttonClasses("primary")}>Create a new one</Link> }
-        : { title: "Couldn't load this playlist", body: error.message, action: <Button variant="primary" onClick={onRetry}>Try again</Button> };
+        ? {
+            title: "This record isn't in the crate",
+            body: "It may have been deleted, or it belongs to another account.",
+            action: (
+              <Link href="/generate" className={buttonClasses("solid")}>
+                Compose a new one
+              </Link>
+            ),
+          }
+        : {
+            title: "Couldn't load this playlist",
+            body: error.message,
+            action: (
+              <Button variant="solid" onClick={onRetry}>
+                Try again
+              </Button>
+            ),
+          };
 
   return (
-    <div className="mx-auto flex max-w-md flex-col items-center px-4 pt-24 text-center">
-      <span className="grid size-14 place-items-center rounded-2xl bg-white/[0.06]">
-        {status === 404 ? <Music2 className="size-6 text-fg-muted" /> : <AlertTriangle className="size-6 text-amber" />}
-      </span>
-      <h1 className="mt-6 text-2xl font-semibold tracking-tight">{content.title}</h1>
-      <p className="mt-2 text-fg-muted">{content.body}</p>
-      <div className="mt-6">{content.action}</div>
+    <div className="mx-auto flex max-w-md flex-col items-center px-5 pt-44 text-center">
+      {status === 404 ? <Disc3 className="size-10 text-fg-faint" /> : <AlertTriangle className="size-10 text-amber" />}
+      <h1 className="display mt-8 text-5xl">{content.title}</h1>
+      <p className="mt-4 text-fg-muted">{content.body}</p>
+      <div className="mt-8">{content.action}</div>
     </div>
   );
 }
@@ -79,11 +101,19 @@ export default function PlaylistPage() {
   const { data: playlist, isLoading, error, refetch } = usePlaylist(id);
   const { data: config } = useConfig();
   const refine = useRefine(id);
+  const regenerating = useIsMutating({ mutationKey: ["regenerate", id] }) > 0;
   const [addOpen, setAddOpen] = useState(false);
+  const [spotlight, setSpotlight] = useState<string | null>(null);
   useMoodTheme(playlist?.intent.energy, playlist?.intent.valence);
+
   useEffect(() => {
     window.scrollTo({ top: 0 });
   }, [id]);
+
+  // Drop the spotlight if that artist leaves the playlist after a refinement.
+  useEffect(() => {
+    if (spotlight && playlist && !playlist.tracks.some((t) => t.artists.includes(spotlight))) setSpotlight(null);
+  }, [playlist, spotlight]);
 
   if (isLoading) return <PlaylistSkeleton />;
   if (error || !playlist) return <ErrorState error={error ?? new Error("Not found")} onRetry={() => refetch()} />;
@@ -98,40 +128,39 @@ export default function PlaylistPage() {
       onError: (e) => toast.error(e.message),
     });
 
-  const refineProps = {
-    playlist,
-    pending: refine.isPending,
-    pendingInstruction: refine.variables,
-    onRefine,
-  };
+  const backdrop = playlist.tracks[0]?.image_url;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 pt-6 pb-48 lg:pb-16">
-      <Link href="/library" className="mb-6 inline-flex items-center gap-1.5 text-sm text-fg-subtle hover:text-fg">
-        <ArrowLeft className="size-4" /> Library
-      </Link>
-
-      <PlaylistHero playlist={playlist} onAddSong={() => setAddOpen(true)} />
-
-      {playlist.notice ? (
-        <p role="status" className="mt-6 flex items-start gap-2 rounded-2xl border border-amber/20 bg-amber/[0.06] px-4 py-3 text-sm text-amber/90">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden /> {playlist.notice}
-        </p>
+    <div className="relative">
+      {/* Atmosphere: the lead record, enlarged and dissolved into the dark */}
+      {backdrop ? (
+        <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[110vh] overflow-hidden">
+          <Image src={backdrop} alt="" fill sizes="100vw" className="scale-125 object-cover opacity-[0.18] blur-[90px] saturate-[1.2]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-ink/30 via-ink/70 to-ink" />
+        </div>
       ) : null}
 
-      <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
-        <div className={refine.isPending ? "pointer-events-none opacity-60 transition-opacity" : "transition-opacity"}>
-          <TrackList playlist={playlist} />
-        </div>
-        <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-          <IntentPanel playlist={playlist} aiModelName={config?.ai_model} />
-          <div className="hidden lg:block">
-            <RefinePanel {...refineProps} />
-          </div>
-        </aside>
+      <div className="mx-auto max-w-6xl px-5 pt-28 pb-56 sm:pt-32">
+        <Link href="/library" className="eyebrow mb-10 inline-flex items-center gap-2 hover:text-fg">
+          <ArrowLeft className="size-3.5" /> Library
+        </Link>
+
+        <PlaylistHero playlist={playlist} onAddSong={() => setAddOpen(true)} />
+
+        {playlist.notice ? (
+          <p role="status" className="mt-10 flex items-start gap-3 rounded-2xl border border-amber/20 bg-amber/[0.05] px-5 py-4 text-sm text-amber/90">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden /> {playlist.notice}
+          </p>
+        ) : null}
+
+        <Featuring tracks={playlist.tracks} active={spotlight} onToggle={setSpotlight} />
+
+        <LinerNotes playlist={playlist} aiModelName={config?.ai_model} />
+
+        <TrackList playlist={playlist} spotlight={spotlight} busy={refine.isPending || regenerating} />
       </div>
 
-      <RefineBar {...refineProps} />
+      <RefineComposer playlist={playlist} pending={refine.isPending} pendingInstruction={refine.variables} onRefine={onRefine} />
       <AddSongDialog playlist={playlist} open={addOpen} onOpenChange={setAddOpen} />
     </div>
   );

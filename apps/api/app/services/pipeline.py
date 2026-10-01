@@ -183,6 +183,7 @@ class PlaylistPipeline:
         tracks = filter_tracks(await resolve(plan.candidates, self.spotify), plan.intent, target)
         tracks = await self._backfill(tracks, plan.intent, target, ai_for_backfill)
 
+        tracks = await self.spotify.attach_artist_images(tracks)
         if len(tracks) < self.settings.min_tracks:
             notice = (notice + " " if notice else "") + (
                 f"Only {len(tracks)} matching songs were found. Try broadening your request."
@@ -221,6 +222,7 @@ class PlaylistPipeline:
                 merged, plan.intent, target, self.ai if source == self.ai.source else HeuristicProvider()
             )
 
+        merged = await self.spotify.attach_artist_images(merged)
         old_ids, new_ids = {t.id for t in tracks}, {t.id for t in merged}
         return RefinementResult(
             intent=plan.intent,
@@ -251,7 +253,7 @@ class PlaylistPipeline:
             pick = filter_tracks(discovered, intent, len(others) + 1, seed=others)[len(others) :]
         if not pick:
             raise LookupError("Couldn't find a good replacement for that song.")
-        replacement = pick[0]
+        replacement = (await self.spotify.attach_artist_images(pick[:1]))[0]
         if replacement.energy is None:
             replacement = replacement.model_copy(update={"energy": target.energy})
         return tracks[:index] + [replacement] + tracks[index + 1 :]
