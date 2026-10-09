@@ -55,6 +55,7 @@ export default function Library(props: LibraryProps) {
     const session = useSession(!isStatic)
     const [items, setItems] = useState<PlaylistSummary[] | null>(null)
     const [error, setError] = useState<string | null>(null)
+    const [query, setQuery] = useState("")
 
     useEffect(() => {
         if (isStatic || !session.ready || !session.user) return
@@ -111,6 +112,9 @@ export default function Library(props: LibraryProps) {
         )
     }
 
+    const needle = query.trim().toLowerCase()
+    const shown = (items ?? []).filter((p: PlaylistSummary) => !needle || p.title.toLowerCase().includes(needle) || p.prompt.toLowerCase().includes(needle) || p.moods.some((m: string) => m.toLowerCase().includes(needle)))
+
     if (!items?.length) {
         return (
             <div style={root}>
@@ -125,15 +129,42 @@ export default function Library(props: LibraryProps) {
 
     return (
         <div style={root}>
-            <div style={{ ...eyebrow, marginBottom: 20 }}>
-                {items.length} {items.length === 1 ? "playlist" : "playlists"}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 24 }}>
+                <div style={eyebrow}>
+                    {shown.length === items.length ? `${items.length} ${items.length === 1 ? "playlist" : "playlists"}` : `${shown.length} of ${items.length}`}
+                </div>
+                {items.length > 3 ? (
+                    <label style={{ position: "relative", display: "block", width: 280, maxWidth: "100%" }}>
+                        <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: C.faint, fontSize: 14, pointerEvents: "none" }}>⌕</span>
+                        <input
+                            type="search"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                            placeholder="Find a playlist or a mood"
+                            aria-label="Search your playlists"
+                            style={{ width: "100%", height: 42, borderRadius: 100, border: `1px solid ${C.line2}`, background: C.surface, color: C.text, padding: "0 16px 0 36px", fontFamily: SANS, fontSize: 14, outline: "none" }}
+                        />
+                    </label>
+                ) : null}
             </div>
+            {shown.length === 0 ? (
+                <p style={{ color: C.subtle, fontSize: 15, padding: "40px 0", textAlign: "center" }}>Nothing matches “{query}”.</p>
+            ) : null}
             <ul style={{ ...grid, listStyle: "none", margin: 0, padding: 0 }}>
-                {items.map((p, i) => (
+                {shown.map((p: PlaylistSummary, i: number) => (
                     <motion.li key={p.id} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: EASE, delay: Math.min(i, 9) * 0.05 }}>
                         <motion.a href={`${playlistPath}?id=${encodeURIComponent(p.id)}`} whileHover="hover" style={{ display: "block", textDecoration: "none", color: "inherit" }}>
                             <motion.div variants={{ hover: { y: -6 } }} transition={{ duration: 0.5, ease: EASE }} style={{ position: "relative", borderRadius: 22, boxShadow: "0 30px 70px -36px rgba(0,0,0,0.95)" }}>
                                 <Collage images={p.cover_images} size="100%" radius={22} />
+                                <motion.div
+                                    variants={{ hover: { opacity: 1 } }}
+                                    initial={{ opacity: 0 }}
+                                    transition={{ duration: 0.35 }}
+                                    style={{ position: "absolute", inset: 0, borderRadius: 22, background: "linear-gradient(180deg, rgba(11,10,13,0.1) 0%, rgba(11,10,13,0.88) 100%)", display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: 18, gap: 10 }}
+                                >
+                                    <span style={{ fontFamily: SERIF, fontStyle: "italic", fontWeight: 300, fontSize: 16, lineHeight: 1.35, color: C.text, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>“{p.prompt}”</span>
+                                    <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: accent }}>Open →</span>
+                                </motion.div>
                                 {p.saved_to_spotify ? (
                                     <span style={{ position: "absolute", top: 12, left: 12, display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 100, background: "rgba(11,10,13,0.75)", backdropFilter: "blur(8px)", fontSize: 11.5, color: C.text }}>
                                         <span style={{ width: 6, height: 6, borderRadius: 6, background: "#1ed760" }} /> On Spotify

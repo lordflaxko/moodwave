@@ -324,3 +324,54 @@ export function Collage({ images, size, radius = 16 }: { images: (string | null 
         </div>
     )
 }
+
+// --- Shared motion helpers --------------------------------------------------------------
+
+/** Real covers used when the API is asleep or unreachable. */
+export const FALLBACK_COVERS = [
+    "https://cdn-images.dzcdn.net/images/cover/fd00ebd6d30d7253f813dba3bb1c66a9/1000x1000-000000-80-0-0.jpg",
+    "https://cdn-images.dzcdn.net/images/cover/f798a866107715dd6dc1049e498ce21f/1000x1000-000000-80-0-0.jpg",
+    "https://cdn-images.dzcdn.net/images/cover/4dff56488d13d0b5e96d93d895c9624b/1000x1000-000000-80-0-0.jpg",
+    "https://cdn-images.dzcdn.net/images/cover/d5232fcff85db84e212da2265dd70866/1000x1000-000000-80-0-0.jpg",
+    "https://cdn-images.dzcdn.net/images/cover/8f0187ad83cdd1f47f1c55420f9df227/1000x1000-000000-80-0-0.jpg",
+    "https://is1-ssl.mzstatic.com/image/thumb/Music113/v4/12/9c/4d/129c4dd1-3ba4-05bd-487d-c4eb1e0eec89/27485.jpg/600x600bb.jpg",
+]
+
+let coverCache: string[] | null = null
+
+/** Album covers from the public showcase endpoint (cached per page), falling back to a fixed set. */
+export function useFeaturedCovers(count = 12): string[] {
+    const [covers, setCovers] = useState<string[]>(coverCache ?? FALLBACK_COVERS)
+    useEffect(() => {
+        if (coverCache) return
+        let alive = true
+        fetch(`${API_URL}/catalog/featured`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((data: { tracks?: { image_url?: string | null }[] } | null) => {
+                const urls = Array.from(new Set((data?.tracks ?? []).map((t) => t.image_url).filter((u): u is string => Boolean(u))))
+                if (urls.length >= 6) {
+                    coverCache = urls
+                    if (alive) setCovers(urls)
+                }
+            })
+            .catch(() => undefined)
+        return () => {
+            alive = false
+        }
+    }, [])
+    return covers.slice(0, count)
+}
+
+/** True on devices with a precise pointer (mouse/trackpad): hover-only effects are off elsewhere. */
+export function useFinePointer(): boolean {
+    const [fine, setFine] = useState(false)
+    useEffect(() => {
+        if (typeof window === "undefined" || !window.matchMedia) return
+        const mq = window.matchMedia("(pointer: fine)")
+        const update = () => setFine(mq.matches)
+        update()
+        mq.addEventListener("change", update)
+        return () => mq.removeEventListener("change", update)
+    }, [])
+    return fine
+}

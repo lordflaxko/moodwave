@@ -13,6 +13,16 @@ paste it into the matching code file in the Framer project (or the other way rou
 | `PlaylistView.tsx` | `/playlist?id=…` | Tracks with reasons, "make it more…", Spotify player, save to Spotify |
 | `Library.tsx` | `/library` | Grid of your playlists |
 | `AccountChip.tsx` | Nav (layout template) | Spotify status, sign in / sign out |
+| `MobileMenu.tsx` | Nav, phone only | Burger + full-screen menu with the account status |
+| `Grain.tsx` | Layout template | Site-wide film grain |
+| `Cursor.tsx` | Layout template | Trailing ring that swells over links (mouse only) |
+| `Preloader.tsx` | Home | Vinyl + equaliser intro, once per session |
+| `Spotlight.tsx` | Home hero | Light that follows the pointer over the portrait wall |
+| `FlowStory.tsx` | Home | Scroll-pinned "How it flows" story (stacked on phones) |
+| `Overrides.tsx` | Mood cards, showcase card, CTAs | `withTilt`, `withTiltGlare`, `withMagnetic` |
+
+Every motion piece checks `prefers-reduced-motion`, and pointer-only effects check
+`(pointer: fine)`.
 
 ## Pointing the site at the API
 

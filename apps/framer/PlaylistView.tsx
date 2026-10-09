@@ -74,17 +74,48 @@ function isSpotifyTrack(t: Track) {
     return t.uri.startsWith("spotify:track:")
 }
 
-function EnergyCurve({ points, accent }: { points: number[]; accent: string }) {
+function EnergyCurve({ points, titles, accent }: { points: number[]; titles: string[]; accent: string }) {
+    const [hover, setHover] = useState<number | null>(null)
     if (points.length < 2) return null
     const w = 240
     const h = 44
     const step = w / (points.length - 1)
-    const d = points.map((p, i) => `${i ? "L" : "M"}${(i * step).toFixed(1)},${(h - 4 - p * (h - 8)).toFixed(1)}`).join(" ")
+    const yOf = (p: number) => h - 4 - p * (h - 8)
+    const d = points.map((p, i) => `${i ? "L" : "M"}${(i * step).toFixed(1)},${yOf(p).toFixed(1)}`).join(" ")
     return (
-        <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" aria-label="Energy across the playlist" role="img">
-            <path d={`${d} L${w},${h} L0,${h} Z`} style={{ fill: mix(accent, "12%") }} />
-            <path d={d} fill="none" stroke={accent} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
-        </svg>
+        <div
+            style={{ position: "relative" }}
+            onPointerMove={(e) => {
+                const r = e.currentTarget.getBoundingClientRect()
+                setHover(Math.max(0, Math.min(points.length - 1, Math.round(((e.clientX - r.left) / r.width) * (points.length - 1)))))
+            }}
+            onPointerLeave={() => setHover(null)}
+        >
+            <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" aria-label="Energy across the playlist" role="img" style={{ display: "block", cursor: "crosshair" }}>
+                <path d={`${d} L${w},${h} L0,${h} Z`} style={{ fill: mix(accent, "12%") }} />
+                <path d={d} fill="none" stroke={accent} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
+                {hover !== null ? <line x1={hover * step} x2={hover * step} y1={0} y2={h} stroke={C.line2} vectorEffect="non-scaling-stroke" /> : null}
+            </svg>
+            {hover !== null ? (
+                <>
+                    <span style={{ position: "absolute", left: `${(hover / (points.length - 1)) * 100}%`, top: yOf(points[hover]), width: 8, height: 8, margin: "-4px 0 0 -4px", borderRadius: 8, background: accent, boxShadow: `0 0 0 3px ${mix(accent, "30%")}` }} />
+                    <span style={{ position: "absolute", bottom: "calc(100% + 6px)", left: `${(hover / (points.length - 1)) * 100}%`, transform: "translateX(-50%)", whiteSpace: "nowrap", padding: "4px 8px", borderRadius: 8, background: C.surface3, border: `1px solid ${C.line2}`, fontFamily: SANS, fontSize: 11.5, color: C.text, pointerEvents: "none" }}>
+                        {String(hover + 1).padStart(2, "0")} · {titles[hover] ?? ""}
+                    </span>
+                </>
+            ) : null}
+        </div>
+    )
+}
+
+/** Three bars bouncing: shown on the track playing in the embed. */
+function Equalizer({ color }: { color: string }) {
+    return (
+        <span aria-label="Playing" style={{ display: "inline-flex", alignItems: "flex-end", gap: 2, height: 12 }}>
+            {[0, 1, 2].map((i) => (
+                <motion.span key={i} animate={{ height: [3, 12, 5, 10, 3] }} transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15 }} style={{ width: 2, borderRadius: 2, background: color }} />
+            ))}
+        </span>
     )
 }
 
@@ -169,6 +200,10 @@ export default function PlaylistView(props: PlaylistViewProps) {
     const [custom, setCustom] = useState("")
     const [playing, setPlaying] = useState<Track | null>(null)
     const [flash, setFlash] = useState<string | null>(null)
+    const [hovered, setHovered] = useState<string | null>(null)
+    const [fresh, setFresh] = useState<Set<string>>(new Set())
+    const [showMini, setShowMini] = useState(false)
+    const headerRef = useRef<HTMLElement>(null)
 
     const id = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("id")
 
@@ -201,11 +236,21 @@ export default function PlaylistView(props: PlaylistViewProps) {
         return () => window.clearTimeout(t)
     }, [flash])
 
+    useEffect(() => {
+        const el = headerRef.current
+        if (!el || typeof IntersectionObserver === "undefined") return
+        const io = new IntersectionObserver(([entry]) => setShowMini(!entry.isIntersecting && entry.boundingClientRect.top < 0), { threshold: 0 })
+        io.observe(el)
+        return () => io.disconnect()
+    }, [playlist?.id])
+
     const refine = async (instruction: string) => {
         if (!playlist || busy || instruction.trim().length < 2) return
         setBusy(instruction)
         try {
             const next = await api<Playlist>(`/playlists/${playlist.id}/refine`, { method: "POST", body: JSON.stringify({ instruction: instruction.trim() }) })
+            const before = new Set(playlist.tracks.map((t: Track) => t.id))
+            setFresh(new Set(next.tracks.filter((t: Track) => !before.has(t.id)).map((t: Track) => t.id)))
             setPlaylist(next)
             setCustom("")
             setFlash(next.refinements[next.refinements.length - 1]?.summary ?? "Updated.")
@@ -306,6 +351,7 @@ export default function PlaylistView(props: PlaylistViewProps) {
 
             {/* Header */}
             <motion.section
+                ref={headerRef}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.9, ease: EASE }}
@@ -316,7 +362,7 @@ export default function PlaylistView(props: PlaylistViewProps) {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={eyebrow}>
-                        AI playlist · {relativeTime(playlist.created_at)} · {playlist.ai_source === "claude" ? "Claude" : "Offline curator"}
+                        AI playlist · {relativeTime(playlist.created_at)} · {playlist.ai_source === "claude" ? "Moodwave AI" : "Quick mix"}
                     </div>
                     <h1 style={{ fontFamily: SERIF, fontWeight: 300, fontSize: narrow ? 44 : 64, lineHeight: 1, letterSpacing: "-0.03em", margin: "14px 0 14px" }}>{playlist.title}</h1>
                     <p style={{ fontSize: 16, lineHeight: 1.55, color: C.muted, margin: 0, maxWidth: 560 }}>{playlist.description}</p>
@@ -373,7 +419,7 @@ export default function PlaylistView(props: PlaylistViewProps) {
                     </div>
                     <div style={{ width: narrow ? "100%" : 220, flexShrink: 0 }}>
                         <div style={{ ...eyebrow, fontSize: 10, marginBottom: 6 }}>Energy arc</div>
-                        <EnergyCurve points={playlist.stats.energy_curve} accent={accent} />
+                        <EnergyCurve points={playlist.stats.energy_curve} titles={playlist.tracks.map((t: Track) => t.title)} accent={accent} />
                     </div>
                 </div>
                 <form
@@ -407,6 +453,7 @@ export default function PlaylistView(props: PlaylistViewProps) {
                     {playlist.tracks.map((t: Track, i: number) => {
                         const playable = isSpotifyTrack(t)
                         const active = playing?.id === t.id
+                        const isNew = fresh.has(t.id)
                         return (
                             <motion.li
                                 key={t.id}
@@ -415,6 +462,8 @@ export default function PlaylistView(props: PlaylistViewProps) {
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.5, ease: EASE, delay: Math.min(i, 12) * 0.03 }}
                                 onClick={() => playable && setPlaying(t)}
+                                onPointerEnter={() => setHovered(t.id)}
+                                onPointerLeave={() => setHovered((h) => (h === t.id ? null : h))}
                                 whileHover={{ backgroundColor: C.surface2 }}
                                 style={{
                                     display: "grid",
@@ -424,11 +473,12 @@ export default function PlaylistView(props: PlaylistViewProps) {
                                     padding: "10px 10px",
                                     borderRadius: 14,
                                     cursor: playable ? "pointer" : "default",
-                                    background: active ? C.surface2 : "transparent",
+                                    background: active ? C.surface2 : isNew ? mix(accent, "7%") : "transparent",
+                                    boxShadow: isNew ? `inset 2px 0 0 ${accent}` : "none",
                                 }}
                             >
                                 <span style={{ fontFamily: MONO, fontSize: 12, color: active ? accent : C.faint, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                                    {active ? "▶" : String(i + 1).padStart(2, "0")}
+                                    {active ? <Equalizer color={accent} /> : hovered === t.id && playable ? <span style={{ color: C.text }}>▶</span> : String(i + 1).padStart(2, "0")}
                                 </span>
                                 {t.image_url ? (
                                     <img src={t.image_url} alt="" width={narrow ? 44 : 48} height={narrow ? 44 : 48} style={{ borderRadius: 8, objectFit: "cover", display: "block" }} />
@@ -438,6 +488,7 @@ export default function PlaylistView(props: PlaylistViewProps) {
                                 <span style={{ minWidth: 0 }}>
                                     <span style={{ display: "flex", gap: 8, alignItems: "baseline", minWidth: 0 }}>
                                         <span style={{ fontSize: 15, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title}</span>
+                                        {isNew ? <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: C.ink, background: accent, borderRadius: 4, padding: "1px 5px" }}>New</span> : null}
                                         {t.explicit ? <span style={{ fontFamily: MONO, fontSize: 9, color: C.subtle, border: `1px solid ${C.line2}`, borderRadius: 3, padding: "0 3px" }}>E</span> : null}
                                         <span style={{ fontSize: 13, color: C.subtle, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.artists.join(", ")}</span>
                                     </span>
@@ -483,6 +534,46 @@ export default function PlaylistView(props: PlaylistViewProps) {
                     </div>
                 ) : null}
             </section>
+
+            {createPortal(
+                <AnimatePresence>
+                    {showMini ? (
+                        <motion.div
+                            key="mini"
+                            initial={{ y: -16, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            exit={{ y: -16, opacity: 0 }}
+                            transition={{ duration: 0.4, ease: EASE }}
+                            style={{ position: "fixed", top: narrow ? 72 : 84, left: 16, right: 16, zIndex: 30, display: "flex", justifyContent: "center", pointerEvents: "none" }}
+                        >
+                            <div style={{ pointerEvents: "auto", width: "100%", maxWidth: 760, display: "flex", alignItems: "center", gap: 12, padding: "8px 8px 8px 8px", borderRadius: 18, background: "rgba(18,16,21,0.86)", backdropFilter: "blur(18px)", WebkitBackdropFilter: "blur(18px)", border: `1px solid ${C.line2}`, boxShadow: "0 20px 50px -20px rgba(0,0,0,0.9)", fontFamily: SANS }}>
+                                <Collage images={covers} size={40} radius={10} />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontFamily: SERIF, fontWeight: 300, fontSize: 18, color: C.text, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{playlist.title}</div>
+                                    <div style={{ fontSize: 12, color: C.subtle }}>
+                                        {playlist.stats.track_count} songs · {duration(playlist.stats.total_duration_ms, true)}
+                                    </div>
+                                </div>
+                                {canSave ? (
+                                    playlist.spotify_url ? (
+                                        <a href={playlist.spotify_url} target="_blank" rel="noreferrer" style={{ ...pill, height: 38, background: C.text, color: C.ink, border: "none", textDecoration: "none", fontWeight: 500 }}>
+                                            Open in Spotify
+                                        </a>
+                                    ) : (
+                                        <button type="button" onClick={save} disabled={Boolean(busy)} style={{ ...pill, height: 38, background: C.text, color: C.ink, border: "none", fontWeight: 500 }}>
+                                            {busy === "save" ? "Saving…" : "Save to Spotify"}
+                                        </button>
+                                    )
+                                ) : null}
+                                <button type="button" aria-label="Back to top" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} style={{ ...pill, height: 38, width: 38, padding: 0, justifyContent: "center" }}>
+                                    ↑
+                                </button>
+                            </div>
+                        </motion.div>
+                    ) : null}
+                </AnimatePresence>,
+                document.body,
+            )}
 
             <AnimatePresence>{playing ? <Player key={playing.id} track={playing} onClose={() => setPlaying(null)} /> : null}</AnimatePresence>
 

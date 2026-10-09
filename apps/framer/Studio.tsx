@@ -1,5 +1,5 @@
 import { addPropertyControls, ControlType, useIsStaticRenderer } from "framer"
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { useEffect, useRef, useState, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
 
@@ -12,6 +12,7 @@ import {
     SERIF,
     signIn,
     startDemo,
+    useFeaturedCovers,
     useSession,
     type GenerateInput,
     type Playlist,
@@ -65,12 +66,72 @@ function clearTrigger() {
     history.replaceState(null, "", url.pathname + url.search)
 }
 
+/** Orbit of real album covers behind the prompt; each cover counter-rotates to stay upright. */
+function CoverOrbit({ covers, reduced }: { covers: string[]; reduced: boolean }) {
+    const n = Math.min(10, covers.length)
+    return (
+        <motion.div
+            aria-hidden
+            animate={reduced ? undefined : { rotate: 360 }}
+            transition={{ duration: 80, ease: "linear", repeat: Infinity }}
+            style={{ position: "absolute", width: "min(900px, 140vw)", aspectRatio: "1 / 1", pointerEvents: "none" }}
+        >
+            {covers.slice(0, n).map((src, i) => {
+                const angle = (i / n) * Math.PI * 2
+                const ring = i % 2 ? 46 : 38
+                const size = i % 3 === 0 ? 92 : 72
+                return (
+                    <motion.img
+                        key={src}
+                        src={src}
+                        alt=""
+                        initial={{ opacity: 0, scale: 0.6 }}
+                        animate={reduced ? { opacity: 0.28, scale: 1 } : { opacity: [0.18, 0.42, 0.18], scale: 1, rotate: -360 }}
+                        transition={{
+                            opacity: { duration: 4 + (i % 4), repeat: Infinity, ease: "easeInOut", delay: i * 0.3 },
+                            scale: { duration: 0.8, ease: EASE, delay: i * 0.06 },
+                            rotate: { duration: 80, ease: "linear", repeat: Infinity },
+                        }}
+                        style={{
+                            position: "absolute",
+                            left: `${50 + Math.cos(angle) * ring}%`,
+                            top: `${50 + Math.sin(angle) * ring}%`,
+                            width: size,
+                            height: size,
+                            marginLeft: -size / 2,
+                            marginTop: -size / 2,
+                            borderRadius: 14,
+                            objectFit: "cover",
+                            filter: `blur(${i % 3 === 1 ? 2 : 0}px) saturate(0.85)`,
+                            boxShadow: "0 20px 50px -20px rgba(0,0,0,0.9)",
+                        }}
+                    />
+                )
+            })}
+        </motion.div>
+    )
+}
+
 function Overlay({ prompt, accent, length }: { prompt: string; accent: string; length: number }) {
+    const reduced = Boolean(useReducedMotion())
+    const covers = useFeaturedCovers(10)
     const [step, setStep] = useState(0)
+    const [elapsed, setElapsed] = useState(0)
+    // A rough estimate so the line keeps moving; it never claims to finish early.
+    const estimate = 8 + length * 0.55
     useEffect(() => {
-        const id = window.setInterval(() => setStep((s) => Math.min(s + 1, STEPS.length - 1)), 2600)
+        const started = Date.now()
+        const id = window.setInterval(() => {
+            const secs = (Date.now() - started) / 1000
+            setElapsed(secs)
+            setStep(Math.min(STEPS.length - 1, Math.floor((secs / estimate) * STEPS.length)))
+        }, 200)
         return () => window.clearInterval(id)
-    }, [])
+    }, [estimate])
+    const progress = Math.min(0.95, 1 - Math.exp(-elapsed / (estimate * 0.6)))
+    const words = prompt.split(/\s+/)
+    const beat = Math.max(0.7, 1.6 - step * 0.2)
+
     return createPortal(
         <motion.div
             role="status"
@@ -86,14 +147,16 @@ function Overlay({ prompt, accent, length }: { prompt: string; accent: string; l
                 display: "grid",
                 placeItems: "center",
                 padding: 24,
-                background: "rgba(11, 10, 13, 0.94)",
+                overflow: "hidden",
+                background: "rgba(11, 10, 13, 0.95)",
                 backdropFilter: "blur(14px)",
                 WebkitBackdropFilter: "blur(14px)",
             }}
         >
+            <CoverOrbit covers={covers} reduced={reduced} />
             <motion.div
                 aria-hidden
-                animate={{ scale: [1, 1.15, 1], opacity: [0.35, 0.6, 0.35] }}
+                animate={reduced ? undefined : { scale: [1, 1.15, 1], opacity: [0.35, 0.6, 0.35] }}
                 transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
                 style={{
                     position: "absolute",
@@ -107,20 +170,30 @@ function Overlay({ prompt, accent, length }: { prompt: string; accent: string; l
             />
             <div style={{ position: "relative", maxWidth: 560, textAlign: "center" }}>
                 <div style={{ display: "flex", justifyContent: "center", gap: 5, height: 40, alignItems: "end", marginBottom: 32 }}>
-                    {Array.from({ length: 7 }).map((_, i) => (
+                    {Array.from({ length: 9 }).map((_, i) => (
                         <motion.span
-                            key={i}
-                            animate={{ height: [8, 34, 14, 28, 8] }}
-                            transition={{ duration: 1.6, repeat: Infinity, delay: i * 0.12, ease: "easeInOut" }}
+                            key={`${i}-${beat}`}
+                            animate={reduced ? { height: 12 } : { height: [8, 34, 14, 28, 8] }}
+                            transition={{ duration: beat, repeat: Infinity, delay: i * (beat / 12), ease: "easeInOut" }}
                             style={{ width: 4, borderRadius: 4, background: i % 2 ? C.text : accent, opacity: 0.85 }}
                         />
                     ))}
                 </div>
                 <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: "0.16em", textTransform: "uppercase", color: C.subtle }}>
-                    Composing your playlist
+                    Composing {length} songs
                 </div>
                 <p style={{ fontFamily: SERIF, fontWeight: 300, fontStyle: "italic", fontSize: 28, lineHeight: 1.3, color: C.text, margin: "16px 0 28px" }}>
-                    “{prompt}”
+                    {words.map((w, i) => (
+                        <motion.span
+                            key={`${w}-${i}`}
+                            initial={reduced ? false : { opacity: 0, y: 10, filter: "blur(6px)" }}
+                            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                            transition={{ duration: 0.5, ease: EASE, delay: 0.2 + i * 0.07 }}
+                            style={{ display: "inline-block", whiteSpace: "pre" }}
+                        >
+                            {(i === 0 ? "“" : "") + w + (i === words.length - 1 ? "”" : " ")}
+                        </motion.span>
+                    ))}
                 </p>
                 <AnimatePresence mode="wait">
                     <motion.div
@@ -134,16 +207,14 @@ function Overlay({ prompt, accent, length }: { prompt: string; accent: string; l
                         {STEPS[step]}…
                     </motion.div>
                 </AnimatePresence>
+                <div style={{ width: 220, height: 2, borderRadius: 2, background: C.line2, margin: "20px auto 0", overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${progress * 100}%`, background: accent, transition: "width 0.2s linear" }} />
+                </div>
                 {length > 40 ? (
                     <p style={{ fontFamily: SANS, fontSize: 13, color: C.faint, margin: "14px 0 0" }}>
                         {length} songs is a big one — this can take a minute or two.
                     </p>
                 ) : null}
-                <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 18 }}>
-                    {STEPS.map((_, i) => (
-                        <span key={i} style={{ width: 18, height: 2, borderRadius: 2, background: i <= step ? accent : C.line2, transition: "background 0.5s ease" }} />
-                    ))}
-                </div>
             </div>
         </motion.div>,
         document.body,
