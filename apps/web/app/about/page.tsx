@@ -1,9 +1,6 @@
-import { ArrowRight } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
 
 import { PipelineStory } from "@/components/about/pipeline";
-import { buttonClasses } from "@/components/ui/button";
 import { Eyebrow, Reveal } from "@/components/ui/primitives";
 
 export const metadata: Metadata = {
@@ -80,32 +77,6 @@ export default function AboutPage() {
         </dl>
       </Reveal>
 
-      <Reveal as="section" className="mt-28 scroll-mt-28" id="setup" aria-labelledby="setup-heading">
-        <div className="surface grid gap-10 rounded-[2rem] p-8 sm:p-12 lg:grid-cols-[1fr_1.2fr]">
-          <div>
-            <Eyebrow>Run it for real</Eyebrow>
-            <h2 id="setup-heading" className="display mt-4 text-[clamp(2.25rem,4vw,3.25rem)]">
-              Connect <em>your</em> services
-            </h2>
-            <p className="mt-5 text-fg-muted">
-              Moodwave works fully in demo mode. Add keys to <code className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[13px]">apps/api/.env</code>{" "}
-              and restart the API to use your Spotify account and Claude.
-            </p>
-            <Link href="/generate" className={buttonClasses("accent", "md", "mt-8")}>
-              Try it now <ArrowRight className="size-4" />
-            </Link>
-          </div>
-          <pre className="overflow-x-auto rounded-2xl border border-line bg-ink/80 p-6 font-mono text-[12.5px] leading-relaxed text-fg-muted">
-{`# Spotify — developer.spotify.com/dashboard
-# Redirect URI: http://127.0.0.1:3000/api/auth/callback
-SPOTIFY_CLIENT_ID=…
-SPOTIFY_CLIENT_SECRET=…
-
-# Anthropic — console.anthropic.com
-ANTHROPIC_API_KEY=…`}
-          </pre>
-        </div>
-      </Reveal>
     </div>
   );
 }

@@ -120,10 +120,7 @@ function StatusChip({ onDone }: { onDone?: () => void }) {
         </dl>
         {!live ? (
           <p className="mt-3 text-xs leading-relaxed text-fg-subtle">
-            Demo mode uses real songs and artwork without touching your Spotify account.{" "}
-            <Link href="/about#setup" className="text-fg-muted underline underline-offset-2 hover:text-fg" onClick={onDone}>
-              Connect real services
-            </Link>
+            Demo mode uses real songs and artwork without touching your Spotify account.
           </p>
         ) : null}
         <div className="mt-4 flex gap-2 border-t border-line pt-4">
