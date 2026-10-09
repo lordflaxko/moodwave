@@ -92,8 +92,14 @@ export default function Composer(props: ComposerProps) {
     const [focused, setFocused] = useState(false)
     const [length, setLength] = useState(24)
     const [energy, setEnergy] = useState<EnergyKey>("auto")
-        const typed = useTypewriter(phrases, !isStatic && !value && !focused)
+    const typed = useTypewriter(phrases, !isStatic && !value && !focused)
     const ready = value.trim().length >= 3
+
+    // On the studio page, show the prompt you arrived with (after mount, so hydration matches).
+    useEffect(() => {
+        const prompt = new URLSearchParams(window.location.search).get("prompt")
+        if (prompt) setValue(prompt.slice(0, 500))
+    }, [])
 
     useEffect(() => {
         const el = textareaRef.current

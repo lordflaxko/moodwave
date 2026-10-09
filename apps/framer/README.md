@@ -24,3 +24,10 @@ developer dashboard).
 Sessions are bearer tokens in `localStorage`; Spotify sign-in returns to the page you
 started on with a one-time code in the URL fragment, which `MoodwaveAPI` swaps for a
 token via `POST /auth/exchange`.
+
+## Gotchas
+
+- The **Moods** CMS "Compose Link" field holds absolute URLs on the site's domain
+  (`https://<site>/create?prompt=…&auto=1`): Framer drops path-only links that carry a
+  query string. Their "New Tab" field is off so they open in the same tab. If the site
+  domain changes, update those five links.
