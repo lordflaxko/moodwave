@@ -155,8 +155,20 @@ class UserOut(BaseModel):
     is_demo: bool
 
 
+class SessionOut(BaseModel):
+    """A bearer session for clients that can't use the cookie (the Framer site)."""
+
+    token: str
+    user: UserOut
+
+
+class ExchangeRequest(BaseModel):
+    code: str = Field(min_length=10, max_length=500)
+
+
 class AppConfigOut(BaseModel):
     demo_mode: bool
+    demo_allowed: bool
     spotify_enabled: bool
     ai_enabled: bool
     ai_model: str | None

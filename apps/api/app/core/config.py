@@ -1,7 +1,8 @@
 """Application settings, loaded from environment variables (and an optional .env file).
 
 Every secret lives here and only here. Nothing in this module is ever sent to the
-browser; the Next.js frontend talks to this service through a same-origin proxy.
+browser; the Next.js frontend talks to this service through a same-origin proxy, and
+the Framer site calls it directly with a bearer token.
 """
 
 from functools import lru_cache
@@ -21,7 +22,12 @@ class Settings(BaseSettings):
     app_name: str = "Moodwave API"
     environment: str = Field(default="development", description="development | production | test")
     frontend_url: str = "http://127.0.0.1:3000"
+    # Extra sites (comma-separated origins) allowed to call the API directly with a bearer
+    # token and to receive Spotify sign-ins, e.g. the published Framer site.
+    extra_origins: str = ""
     database_url: str = f"sqlite:///{(API_ROOT / 'moodwave.db').as_posix()}"
+    # Anonymous demo sessions. Turn off on a public deploy so strangers can't spend AI credits.
+    allow_demo: bool = True
 
     # Used to sign the session cookie and derive the token-encryption key.
     session_secret: str = "dev-only-change-me-please-0123456789abcdef"
@@ -45,6 +51,19 @@ class Settings(BaseSettings):
     generate_rate_limit_per_minute: int = 8
     min_tracks: int = 15
     max_tracks: int = 30
+
+    @property
+    def allowed_origins(self) -> list[str]:
+        extra = [o.strip().rstrip("/") for o in self.extra_origins.split(",") if o.strip()]
+        return [self.frontend_url.rstrip("/"), *extra]
+
+    @property
+    def sqlalchemy_url(self) -> str:
+        """Hosted Postgres URLs usually say `postgres://`; SQLAlchemy wants an explicit driver."""
+        for prefix in ("postgres://", "postgresql://"):
+            if self.database_url.startswith(prefix):
+                return "postgresql+psycopg://" + self.database_url.removeprefix(prefix)
+        return self.database_url
 
     @property
     def spotify_enabled(self) -> bool:

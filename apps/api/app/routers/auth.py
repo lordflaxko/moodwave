@@ -1,7 +1,7 @@
 """Authentication: Spotify OAuth (Authorization Code + PKCE), demo sessions, and logout."""
 
 import logging
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -13,12 +13,15 @@ from app.core.security import (
     OAUTH_COOKIE_MAX_AGE,
     OAUTH_COOKIE_NAME,
     new_oauth_challenge,
+    oauth_return_to,
+    read_handoff,
+    sign_handoff,
     sign_session,
     verify_oauth_state,
 )
 from app.deps import DbSession, SettingsDep, get_optional_user
 from app.models import User
-from app.schemas import AppConfigOut, UserOut
+from app.schemas import AppConfigOut, ExchangeRequest, SessionOut, UserOut
 from app.services.spotify.base import SpotifyError
 from app.services.spotify.oauth import authorize_url, exchange_code, store_tokens
 
@@ -28,6 +31,20 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 def _user_out(user: User) -> UserOut:
     return UserOut(id=user.id, display_name=user.display_name, avatar_url=user.avatar_url, is_demo=user.is_demo)
+
+
+def _safe_return_to(url: str | None, settings: Settings) -> str | None:
+    """Accept only http(s) URLs on an allowed origin; drop any fragment."""
+    if not url:
+        return None
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https") or f"{parts.scheme}://{parts.netloc}" not in settings.allowed_origins:
+        return None
+    return urlunsplit((parts.scheme, parts.netloc, parts.path or "/", parts.query, ""))
+
+
+# Hand-off codes already swapped for a token (single instance, so memory is enough).
+_used_handoffs: set[str] = set()
 
 
 def _set_session_cookie(response: Response, settings: Settings, user_id: str) -> None:
@@ -46,6 +63,7 @@ def _set_session_cookie(response: Response, settings: Settings, user_id: str) ->
 def app_config(settings: SettingsDep) -> AppConfigOut:
     return AppConfigOut(
         demo_mode=settings.demo_mode,
+        demo_allowed=settings.allow_demo,
         spotify_enabled=settings.spotify_enabled,
         ai_enabled=settings.ai_enabled,
         ai_model=settings.anthropic_model if settings.ai_enabled else None,
@@ -59,10 +77,14 @@ def me(request: Request, db: DbSession, settings: SettingsDep) -> UserOut | None
 
 
 @router.get("/login")
-def login(settings: SettingsDep) -> RedirectResponse:
+def login(settings: SettingsDep, return_to: str | None = None) -> RedirectResponse:
+    """Start Spotify sign-in. External sites pass `return_to` (a page on an allowed origin)."""
     if not settings.spotify_enabled:
         raise HTTPException(400, "Spotify is not configured on this server. Use the demo instead.")
-    challenge = new_oauth_challenge()
+    safe_return = _safe_return_to(return_to, settings)
+    if return_to and not safe_return:
+        raise HTTPException(400, "That return address isn't allowed.")
+    challenge = new_oauth_challenge(safe_return)
     response = RedirectResponse(authorize_url(challenge.state, challenge.challenge), status_code=302)
     response.set_cookie(
         OAUTH_COOKIE_NAME,
@@ -85,8 +107,11 @@ async def callback(
     state: str | None = None,
     error: str | None = None,
 ) -> RedirectResponse:
+    return_to = _safe_return_to(oauth_return_to(request.cookies.get(OAUTH_COOKIE_NAME)), settings)
+
     def fail(reason: str) -> RedirectResponse:
-        response = RedirectResponse(f"{settings.frontend_url}/?{urlencode({'auth_error': reason})}", status_code=302)
+        target = return_to.split("?")[0] if return_to else f"{settings.frontend_url}/"
+        response = RedirectResponse(f"{target}?{urlencode({'auth_error': reason})}", status_code=302)
         response.delete_cookie(OAUTH_COOKIE_NAME, path="/")
         return response
 
@@ -123,10 +148,36 @@ async def callback(
     db.refresh(user)
     store_tokens(db, user.id, tokens)
 
+    if return_to:
+        response = RedirectResponse(f"{return_to}#{urlencode({'mw_code': sign_handoff(user.id)})}", status_code=302)
+        response.delete_cookie(OAUTH_COOKIE_NAME, path="/")
+        return response
+
     response = RedirectResponse(f"{settings.frontend_url}/generate", status_code=302)
     response.delete_cookie(OAUTH_COOKIE_NAME, path="/")
     _set_session_cookie(response, settings, user.id)
     return response
+
+
+@router.post("/exchange", response_model=SessionOut)
+def exchange(body: ExchangeRequest, db: DbSession) -> SessionOut:
+    """Swap a sign-in hand-off code (from the callback redirect) for a bearer session."""
+    user_id = read_handoff(body.code)
+    user = db.get(User, user_id) if user_id else None
+    if user is None or body.code in _used_handoffs:
+        raise HTTPException(400, "That sign-in link has expired. Please sign in again.")
+    _used_handoffs.add(body.code)
+    return SessionOut(token=sign_session(user.id), user=_user_out(user))
+
+
+def _new_demo_user(db: DbSession, settings: Settings) -> User:
+    if not settings.allow_demo:
+        raise HTTPException(403, "The demo is switched off here. Sign in with Spotify instead.")
+    user = User(display_name="Demo Listener", is_demo=True)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 @router.post("/demo", response_model=UserOut)
@@ -134,12 +185,16 @@ def start_demo(request: Request, response: Response, db: DbSession, settings: Se
     existing = get_optional_user(request, db, settings)
     if existing is not None:
         return _user_out(existing)
-    user = User(display_name="Demo Listener", is_demo=True)
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    user = _new_demo_user(db, settings)
     _set_session_cookie(response, settings, user.id)
     return _user_out(user)
+
+
+@router.post("/demo/token", response_model=SessionOut)
+def start_demo_token(db: DbSession, settings: SettingsDep) -> SessionOut:
+    """Demo session as a bearer token, for the Framer site."""
+    user = _new_demo_user(db, settings)
+    return SessionOut(token=sign_session(user.id), user=_user_out(user))
 
 
 @router.post("/logout", status_code=204)

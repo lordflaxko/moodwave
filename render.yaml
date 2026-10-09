@@ -1,0 +1,39 @@
+# Render blueprint for the Moodwave API (the Framer site calls it directly).
+# Deploy: Render dashboard → New → Blueprint → pick this repo. Secrets marked
+# `sync: false` are entered in the dashboard and never committed.
+services:
+  - type: web
+    name: moodwave-api
+    runtime: docker
+    rootDir: apps/api
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      # Public demo sessions would spend your Claude credits; Spotify sign-in only.
+      - key: ALLOW_DEMO
+        value: "false"
+      - key: SESSION_SECRET
+        generateValue: true
+      # Postgres connection string (e.g. a free Neon database). Free Render disks are
+      # wiped on every deploy, so SQLite would lose your library.
+      - key: DATABASE_URL
+        sync: false
+      # The published Framer site, e.g. https://your-site.framer.app
+      - key: EXTRA_ORIGINS
+        sync: false
+      # Where the Next.js app runs, if you still use it (only used for its sign-in redirect).
+      - key: FRONTEND_URL
+        value: http://127.0.0.1:3000
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      # https://<this service>.onrender.com/auth/callback, also added in the Spotify dashboard.
+      - key: SPOTIFY_REDIRECT_URI
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
