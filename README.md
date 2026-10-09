@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | ![Library](docs/screenshots/library.jpg) | ![How it works](docs/screenshots/how-it-works.jpg) | ![Generation transition](docs/screenshots/generating.jpg) |
 
-**Stack:** Next.js 15 · React 19 · TypeScript · Tailwind CSS v4 · Motion · TanStack Query · Radix · **Python 3.12 · FastAPI · SQLModel** · LLM (Anthropic API) · Spotify Web API · Docker · GitHub Actions
+**Stack:** Next.js 15 · React 19 · TypeScript · Tailwind CSS v4 · Motion · TanStack Query · Radix · **Python 3.12 · FastAPI · SQLModel** · Anthropic Claude · Spotify Web API · Docker · GitHub Actions
 
 ---
 
@@ -21,7 +21,7 @@
 1. [Features](#features)
 1. [Design: "Nocturne"](#design-nocturne)
 2. [Quick start (demo mode, no keys needed)](#quick-start-demo-mode-no-keys-needed)
-3. [Connecting Spotify and the AI model](#connecting-spotify-and-the-ai-model)
+3. [Connecting Spotify and Claude](#connecting-spotify-and-claude)
 4. [Environment variables](#environment-variables)
 5. [Architecture](#architecture)
 6. [The AI recommendation workflow](#the-ai-recommendation-workflow)
@@ -108,7 +108,7 @@ Open **http://127.0.0.1:3000** and click **Try the demo**, or just type a prompt
 docker compose up --build       # http://127.0.0.1:3000
 ```
 
-## Connecting Spotify and the AI model
+## Connecting Spotify and Claude
 
 Both integrations are optional and independent. Add keys to `apps/api/.env` and restart the API.
 
@@ -118,11 +118,11 @@ Both integrations are optional and independent. Add keys to `apps/api/.env` and 
 3. Copy the Client ID and Client Secret into `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET`.
 4. New apps run in **development mode**, so add your Spotify account (and any demo viewers) under *User Management*. Unlisted users get a friendly "not allow-listed" message.
 
-### AI model (Anthropic API)
+### Anthropic (Claude)
 1. Create a key at <https://console.anthropic.com>.
-2. Set `ANTHROPIC_API_KEY`. The model is set with `ANTHROPIC_MODEL` (default in `apps/api/.env.example`).
+2. Set `ANTHROPIC_API_KEY`. The model defaults to `claude-sonnet-5-5` and can be changed with `ANTHROPIC_MODEL`.
 
-The UI always shows which integrations are live (demo banner, plus a "Moodwave AI" or "Quick mix" badge on every playlist).
+The UI always shows which integrations are live (demo banner, plus a "Claude" or "Offline curator" badge on every playlist).
 
 ## Environment variables
 
@@ -137,8 +137,8 @@ The UI always shows which integrations are live (demo banner, plus a "Moodwave A
 | `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` | – | Enables real Spotify. Leave blank for demo mode. |
 | `SPOTIFY_REDIRECT_URI` | `http://127.0.0.1:3000/api/auth/callback` | Must match the Spotify dashboard. |
 | `SPOTIFY_MARKET` | `US` | Market used for search availability. |
-| `ANTHROPIC_API_KEY` | – | Enables the AI model. Leave blank for the heuristic curator. |
-| `ANTHROPIC_MODEL` | see `.env.example` | Model id. |
+| `ANTHROPIC_API_KEY` | – | Enables Claude. Leave blank for the heuristic curator. |
+| `ANTHROPIC_MODEL` | `claude-sonnet-5-5` | Model id. |
 | `ANTHROPIC_EFFORT` | `medium` | Effort for the initial plan (refinements use `low` for speed). |
 | `ANTHROPIC_ENABLE_FALLBACKS` | `true` | Server-side refusal fallback (`fallbacks: "default"`). |
 | `GENERATE_RATE_LIMIT_PER_MINUTE` | `8` | Per-user generation/refine limit. |
@@ -166,7 +166,7 @@ flowchart LR
       SP{{"SpotifyClient"}}
       DB[("SQLite / Postgres<br/>SQLModel")]
     end
-    LLM["LLM (Anthropic API)<br/>structured outputs"]
+    Claude["Anthropic Claude<br/>structured outputs"]
     Spotify["Spotify Web API<br/>+ Accounts (OAuth PKCE)"]
     Catalog["Demo catalog<br/>290+ songs + artwork"]
 
@@ -175,13 +175,13 @@ flowchart LR
     P --> AI
     P --> SP
     R --> DB
-    AI -- LLM provider --> LLM
+    AI -- ClaudeProvider --> Claude
     AI -. HeuristicProvider .-> Catalog
     SP -- SpotifyHttpClient --> Spotify
     SP -. MockSpotifyClient .-> Catalog
 ```
 
-- **Service layer behind interfaces.** Routers depend on the `AIProvider` and `SpotifyClient` protocols, not concrete classes. FastAPI dependencies pick the implementation (LLM or heuristic, real or mock) from configuration, so the pipeline code is identical in demo and production, and tests inject fakes.
+- **Service layer behind interfaces.** Routers depend on the `AIProvider` and `SpotifyClient` protocols, not concrete classes. FastAPI dependencies pick the implementation (Claude or heuristic, real or mock) from configuration, so the pipeline code is identical in demo and production, and tests inject fakes.
 - **Same-origin by design.** The browser never calls Spotify or Anthropic, and never sees a token. Next.js rewrites `/api/*` to FastAPI, so the session cookie is first-party.
 - **Persistence.** `User`, `SpotifyToken` (encrypted), `Playlist` (intent stored as JSON), `PlaylistTrack` (ordered) and `RefinementTurn` (conversation history).
 
@@ -192,7 +192,7 @@ sequenceDiagram
     autonumber
     participant U as User
     participant API as FastAPI pipeline
-    participant C as LLM
+    participant C as Claude
     participant S as Spotify Search
     U->>API: "late-night study, mellow indie" (+ length, energy, explicit, taste)
     API->>S: (optional) top artists for light personalization
@@ -214,14 +214,14 @@ sequenceDiagram
     API-->>U: songs swapped in place + "what changed"
 ```
 
-1. **Interpret.** The LLM provider calls the Messages API with **structured outputs** (`output_config.format` with a JSON schema), so the response is guaranteed to be valid JSON. It's validated into a Pydantic `MusicalIntent`: title, description, moods, genres, sonic characteristics, energy and valence (0–1), tempo range, era, vocal preference, explicit policy, reference artists and a listener-facing **rationale**. Alongside it come about `target + 14` sequenced candidates. The static system prompt is marked for **prompt caching**. Refusals, truncation and API errors become a typed `AIError`.
+1. **Interpret.** `ClaudeProvider` calls the Messages API with **structured outputs** (`output_config.format` with a JSON schema), so the response is guaranteed to be valid JSON. It's validated into a Pydantic `MusicalIntent`: title, description, moods, genres, sonic characteristics, energy and valence (0–1), tempo range, era, vocal preference, explicit policy, reference artists and a listener-facing **rationale**. Alongside it come about `target + 14` sequenced candidates. The static system prompt is marked for **prompt caching**. Refusals, truncation and API errors become a typed `AIError`.
 2. **Resolve.** Each candidate is looked up with a field-filtered Spotify search (`track:"…" artist:"…"`), falling back to a looser query for remasters and alternate titles. Lookups run concurrently under a semaphore and honor `429 Retry-After`.
 3. **Verify.** RapidFuzz compares the normalized title and artist (stripping "– Remastered", "(feat. …)", punctuation). Hits below the thresholds (title ≥ 85, artist ≥ 80) are discarded. **This is the hallucination guard:** a song the model invents simply never makes it into the playlist (see `test_hallucinated_songs_are_dropped_and_backfilled`).
 4. **Filter and sequence.** Explicit policy, a 1–12 minute duration bound, de-duplication by id and by normalized `(title, artist)`, and at most two songs per artist (four for single-artist requests). The model's listening order is preserved.
-5. **Backfill.** If too few tracks survive, the model is asked for more songs that exclude what's already used. If that still isn't enough, an intent-driven discovery search (genres and reference artists) fills the remaining slots.
-6. **Refine.** The current intent, track list (ids, explicit flags, energy) and instruction go back to the model, which returns an updated intent and rationale, `remove_track_ids`, new candidates, a `target_length` and a summary. New verified songs replace the removed songs **in place**, so the energy arc keeps its shape. Each turn is persisted as conversation history.
+5. **Backfill.** If too few tracks survive, Claude is asked for more songs that exclude what's already used. If that still isn't enough, an intent-driven discovery search (genres and reference artists) fills the remaining slots.
+6. **Refine.** The current intent, track list (ids, explicit flags, energy) and instruction go back to Claude, which returns an updated intent and rationale, `remove_track_ids`, new candidates, a `target_length` and a summary. New verified songs replace the removed songs **in place**, so the energy arc keeps its shape. Each turn is persisted as conversation history.
 7. **Replace one.** The same flow scoped to one slot: alternatives with a similar energy and role in the sequence.
-8. **Graceful degradation.** If the model errors, refuses or is rate-limited, the pipeline transparently falls back to the **heuristic curator** (keyword lexicon → the same `MusicalIntent` shape → feature-scored catalog picks with arc sequencing) and the UI shows a notice.
+8. **Graceful degradation.** If Claude errors, refuses or is rate-limited, the pipeline transparently falls back to the **heuristic curator** (keyword lexicon → the same `MusicalIntent` shape → feature-scored catalog picks with arc sequencing) and the UI shows a notice.
 
 ## Spotify API integration
 
@@ -273,7 +273,7 @@ moodwave/
 │  │  │  ├─ data/catalog.py       demo catalog (290+ real songs + features), artwork.json, artist_images.json
 │  │  │  ├─ routers/              auth · playlists · spotify
 │  │  │  ├─ services/
-│  │  │  │  ├─ ai/                AIProvider protocol, LLM + heuristic providers, prompts & schemas
+│  │  │  │  ├─ ai/                AIProvider protocol, Claude + heuristic, prompts & schemas
 │  │  │  │  ├─ spotify/           SpotifyClient protocol, HTTP + mock clients, OAuth
 │  │  │  │  └─ pipeline.py        interpret → resolve → verify → filter → backfill → refine
 │  │  │  ├─ deps.py               DI, auth, rate limiting
