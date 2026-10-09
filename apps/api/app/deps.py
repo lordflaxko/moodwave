@@ -24,8 +24,16 @@ DbSession = Annotated[Session, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
+def session_token(request: Request, settings: Settings) -> str | None:
+    """The signed session: a bearer token (Framer site) or the httpOnly cookie (Next.js app)."""
+    scheme, _, token = request.headers.get("authorization", "").partition(" ")
+    if scheme.lower() == "bearer" and token:
+        return token.strip()
+    return request.cookies.get(settings.session_cookie_name)
+
+
 def get_optional_user(request: Request, db: DbSession, settings: SettingsDep) -> User | None:
-    user_id = read_session(request.cookies.get(settings.session_cookie_name))
+    user_id = read_session(session_token(request, settings))
     return db.get(User, user_id) if user_id else None
 
 

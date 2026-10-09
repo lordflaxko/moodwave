@@ -7,8 +7,10 @@ from sqlmodel import Session, SQLModel, create_engine
 from app.core.config import get_settings
 
 _settings = get_settings()
-_connect_args = {"check_same_thread": False} if _settings.database_url.startswith("sqlite") else {}
-engine = create_engine(_settings.database_url, connect_args=_connect_args)
+_url = _settings.sqlalchemy_url
+_connect_args = {"check_same_thread": False} if _url.startswith("sqlite") else {}
+# pool_pre_ping: hosted Postgres drops idle connections while a free instance sleeps.
+engine = create_engine(_url, connect_args=_connect_args, pool_pre_ping=True)
 
 
 def init_db() -> None:
