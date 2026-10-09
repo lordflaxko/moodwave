@@ -16,6 +16,15 @@ const MAX_LENGTH = 500;
 
 type EnergyKey = "auto" | "calm" | "steady" | "lift" | "peak";
 const ENERGY: Record<EnergyKey, number | null> = { auto: null, calm: 0.2, steady: 0.45, lift: 0.68, peak: 0.9 };
+const energyKeyFor = (value: number | null): EnergyKey =>
+  (Object.keys(ENERGY) as EnergyKey[]).find((key) => ENERGY[key] === value) ?? "auto";
+
+/** Settings handed over by the Framer site's composer, which links here with `?auto=1`. */
+export interface AutoStart {
+  length: number;
+  energy: number | null;
+}
+
 const ENERGY_OPTIONS: { value: EnergyKey; label: string }[] = [
   { value: "auto", label: "Auto" },
   { value: "calm", label: "Calm" },
@@ -95,6 +104,7 @@ export function Composer({
   onValueChange,
   autoFocus,
   focusSignal,
+  autoStart,
   className,
 }: {
   value: string;
@@ -102,18 +112,21 @@ export function Composer({
   autoFocus?: boolean;
   /** Increment to programmatically focus the prompt (e.g. after picking a mood). */
   focusSignal?: number;
+  /** Compose once on arrival with these settings. */
+  autoStart?: AutoStart;
   className?: string;
 }) {
   const id = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [focused, setFocused] = useState(false);
-  const [length, setLength] = useState(24);
-  const [energy, setEnergy] = useState<EnergyKey>("auto");
+  const [length, setLength] = useState(autoStart?.length ?? 24);
+  const [energy, setEnergy] = useState<EnergyKey>(() => energyKeyFor(autoStart?.energy ?? null));
   const [clean, setClean] = useState(false);
   const [useTaste, setUseTaste] = useState(false);
-  const { data: config } = useConfig();
+  const { data: config, isFetched: configReady } = useConfig();
   const { data: me } = useMe();
   const { start, isPending, variables } = useGenerateFlow();
+  const autoStarted = useRef(false);
 
   const typed = useTypewriter(TYPEWRITER_PROMPTS, !value && !focused);
   const tasteAvailable = Boolean(config?.spotify_enabled && me && !me.is_demo);
@@ -136,6 +149,13 @@ export function Composer({
     el.focus({ preventScroll: true });
     el.setSelectionRange(el.value.length, el.value.length);
   }, [focusSignal]);
+
+  // Wait for the config so a signed-out visitor gets the right path (Spotify sign-in or demo).
+  useEffect(() => {
+    if (!autoStart || autoStarted.current || !configReady || value.trim().length < 3) return;
+    autoStarted.current = true;
+    void start({ prompt: value, length: autoStart.length, energy: autoStart.energy, allow_explicit: true, use_my_taste: false });
+  }, [autoStart, configReady, value, start]);
 
   const submit = () => {
     if (isPending) return;
