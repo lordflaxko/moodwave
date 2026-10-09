@@ -14,10 +14,13 @@ import { useConfig, useDemoLogin, useLogout, useMe } from "@/lib/api/hooks";
 import { EASE } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 
+// When the Framer marketing site is live, the wordmark and "How it works" lead back to it.
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
+
 const LINKS = [
   { href: "/generate", label: "Create" },
   { href: "/library", label: "Library" },
-  { href: "/about", label: "How it works" },
+  { href: SITE_URL ? `${SITE_URL}/how-it-works` : "/about", label: "How it works" },
 ];
 
 function StatusDot({ tone }: { tone: "live" | "demo" | "off" }) {
@@ -164,7 +167,7 @@ export function Nav() {
           scrolled || open ? "chrome" : "border border-transparent",
         )}
       >
-        <Link href="/" aria-label="Moodwave home" className="rounded-full">
+        <Link href={SITE_URL ?? "/"} aria-label="Moodwave home" className="rounded-full">
           <Logo />
         </Link>
 

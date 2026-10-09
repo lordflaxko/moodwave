@@ -2,10 +2,11 @@
 
 import { ArrowRight } from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 
 import { Collage } from "@/components/art/collage";
+import type { AutoStart } from "@/components/composer/composer";
 import { Hero } from "@/components/landing/hero";
 import { Eyebrow, Reveal } from "@/components/ui/primitives";
 import { useMe, usePlaylists } from "@/lib/api/hooks";
@@ -47,11 +48,35 @@ function RecentPlaylists() {
   );
 }
 
+/** `?prompt=…&auto=1` (from the Framer site) composes straight away; length and energy are optional. */
+function readAutoStart(params: URLSearchParams): AutoStart | undefined {
+  if (params.get("auto") !== "1" || !params.get("prompt")?.trim()) return undefined;
+  const rawLength = params.get("length");
+  const rawEnergy = params.get("energy");
+  const length = rawLength === null ? NaN : Number(rawLength);
+  const energy = rawEnergy === null ? NaN : Number(rawEnergy);
+  return {
+    length: Number.isFinite(length) ? Math.min(30, Math.max(15, Math.round(length))) : 24,
+    energy: Number.isFinite(energy) && energy >= 0 && energy <= 1 ? energy : null,
+  };
+}
+
 function Studio() {
   const params = useSearchParams();
+  const router = useRouter();
+  const [autoStart] = useState(() => readAutoStart(new URLSearchParams(params.toString())));
+
+  // Drop the trigger so a refresh or back-navigation doesn't compose a second playlist.
+  useEffect(() => {
+    if (!autoStart || params.get("auto") !== "1") return;
+    const next = new URLSearchParams(params.toString());
+    for (const key of ["auto", "length", "energy"]) next.delete(key);
+    router.replace(`/generate?${next.toString()}`, { scroll: false });
+  }, [autoStart, params, router]);
+
   return (
     <>
-      <Hero initialPrompt={params.get("prompt") ?? ""} compact />
+      <Hero initialPrompt={params.get("prompt") ?? ""} compact autoStart={autoStart} />
       <RecentPlaylists />
     </>
   );

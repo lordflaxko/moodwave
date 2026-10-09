@@ -3,7 +3,7 @@
 import { motion } from "motion/react";
 import { useState } from "react";
 
-import { Composer } from "@/components/composer/composer";
+import { type AutoStart, Composer } from "@/components/composer/composer";
 import { MoodCard } from "@/components/landing/mood-card";
 import { PortraitWall } from "@/components/landing/portrait-wall";
 import { EASE } from "@/lib/motion";
@@ -20,7 +20,15 @@ const ORBIT = [
   "xl:inset-x-0 xl:mx-auto xl:top-[calc(100%+2.25rem)]",
 ];
 
-export function Hero({ initialPrompt = "", compact = false }: { initialPrompt?: string; compact?: boolean }) {
+export function Hero({
+  initialPrompt = "",
+  compact = false,
+  autoStart,
+}: {
+  initialPrompt?: string;
+  compact?: boolean;
+  autoStart?: AutoStart;
+}) {
   const [prompt, setPrompt] = useState(initialPrompt);
   const [focusSignal, setFocusSignal] = useState(0);
   const [hovered, setHovered] = useState<Mood | null>(null);
@@ -88,7 +96,7 @@ export function Hero({ initialPrompt = "", compact = false }: { initialPrompt?: 
           transition={{ duration: 1.1, ease: EASE, delay: 0.55 }}
           className="relative z-10 text-left"
         >
-          <Composer value={prompt} onValueChange={setPrompt} focusSignal={focusSignal} autoFocus={compact} />
+          <Composer value={prompt} onValueChange={setPrompt} focusSignal={focusSignal} autoFocus={compact} autoStart={autoStart} />
         </motion.div>
 
         {/* Floating moods: orbit the composer on desktop, a swipeable row below it elsewhere */}
