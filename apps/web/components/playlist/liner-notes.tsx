@@ -9,7 +9,7 @@ import { EASE } from "@/lib/motion";
 import type { Playlist } from "@/lib/types";
 
 /** "Why this fits", written as liner notes: the curator's reasoning, then the facts. */
-export function LinerNotes({ playlist, aiModelName }: { playlist: Playlist; aiModelName?: string | null }) {
+export function LinerNotes({ playlist }: { playlist: Playlist }) {
   const { intent, stats } = playlist;
   const facts = [
     ["Tempo", `${intent.tempo_min}–${intent.tempo_max} BPM`],
@@ -24,7 +24,7 @@ export function LinerNotes({ playlist, aiModelName }: { playlist: Playlist; aiMo
     <Reveal as="section" className="mt-24 grid gap-12 border-y border-line py-14 lg:grid-cols-[1.5fr_1fr] lg:gap-16" aria-labelledby="notes-heading">
       <div>
         <Eyebrow>
-          <span id="notes-heading">Liner notes</span> · {playlist.ai_source === "claude" ? (aiModelName ?? "Claude") : "Offline curator"}
+          <span id="notes-heading">Liner notes</span> · {playlist.ai_source === "claude" ? "Moodwave AI" : "Quick mix"}
         </Eyebrow>
         <AnimatePresence mode="wait">
           <motion.blockquote

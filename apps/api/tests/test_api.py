@@ -11,7 +11,6 @@ def test_config_reports_demo_mode(client):
         "demo_allowed": True,
         "spotify_enabled": False,
         "ai_enabled": False,
-        "ai_model": None,
     }
 
 

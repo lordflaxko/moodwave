@@ -66,7 +66,6 @@ def app_config(settings: SettingsDep) -> AppConfigOut:
         demo_allowed=settings.allow_demo,
         spotify_enabled=settings.spotify_enabled,
         ai_enabled=settings.ai_enabled,
-        ai_model=settings.anthropic_model if settings.ai_enabled else None,
     )
 
 

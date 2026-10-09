@@ -113,7 +113,7 @@ export function PlaylistHero({ playlist, onAddSong }: { playlist: Playlist; onAd
 
       <div className="min-w-0">
         <Eyebrow>
-          AI playlist · {relativeTime(playlist.created_at)} · {playlist.ai_source === "claude" ? "Curated by Claude" : "Offline curator"}
+          AI playlist · {relativeTime(playlist.created_at)} · {playlist.ai_source === "claude" ? "Moodwave AI" : "Quick mix"}
         </Eyebrow>
         <div className="mt-4">
           <EditableTitle key={playlist.title} playlist={playlist} />

@@ -99,7 +99,6 @@ export interface AppConfig {
   demo_mode: boolean;
   spotify_enabled: boolean;
   ai_enabled: boolean;
-  ai_model: string | null;
 }
 
 export interface SpotifyPlaylist {

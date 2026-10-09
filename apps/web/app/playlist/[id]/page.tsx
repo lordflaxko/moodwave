@@ -18,7 +18,7 @@ import { TrackList } from "@/components/playlist/track-list";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/primitives";
 import { ApiError } from "@/lib/api/client";
-import { useConfig, usePlaylist, useRefine } from "@/lib/api/hooks";
+import { usePlaylist, useRefine } from "@/lib/api/hooks";
 import { useMoodTheme } from "@/lib/use-mood-theme";
 
 function PlaylistSkeleton() {
@@ -99,7 +99,6 @@ function ErrorState({ error, onRetry }: { error: Error; onRetry: () => void }) {
 export default function PlaylistPage() {
   const { id } = useParams<{ id: string }>();
   const { data: playlist, isLoading, error, refetch } = usePlaylist(id);
-  const { data: config } = useConfig();
   const refine = useRefine(id);
   const regenerating = useIsMutating({ mutationKey: ["regenerate", id] }) > 0;
   const [addOpen, setAddOpen] = useState(false);
@@ -155,7 +154,7 @@ export default function PlaylistPage() {
 
         <Featuring tracks={playlist.tracks} active={spotlight} onToggle={setSpotlight} />
 
-        <LinerNotes playlist={playlist} aiModelName={config?.ai_model} />
+        <LinerNotes playlist={playlist} />
 
         <TrackList playlist={playlist} spotlight={spotlight} busy={refine.isPending || regenerating} />
       </div>

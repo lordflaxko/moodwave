@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 const NOTES = [
   {
     title: "Structured, not guessed",
-    body: "Claude answers through a JSON schema (structured outputs), so the interpretation is typed data the app can display, validate and refine.",
+    body: "The AI answers through a JSON schema (structured outputs), so the interpretation is typed data the app can display, validate and refine.",
   },
   {
     title: "Verified against Spotify",
@@ -30,7 +30,7 @@ const NOTES = [
 const STACK = [
   ["Interface", "Next.js 15 · React 19 · TypeScript · Tailwind v4 · Motion · TanStack Query · dnd-kit · Radix"],
   ["Service", "Python · FastAPI · Pydantic · SQLModel · httpx · RapidFuzz"],
-  ["Intelligence", "Anthropic Claude: structured outputs, prompt caching, refusal fallbacks"],
+  ["Intelligence", "LLM with structured outputs, prompt caching and refusal fallbacks"],
   ["Music", "Spotify Web API · OAuth 2.0 + PKCE · Embed player"],
 ];
 

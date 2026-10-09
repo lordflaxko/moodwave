@@ -118,7 +118,7 @@ function StatusChip({ onDone }: { onDone?: () => void }) {
           </div>
           <div className="flex items-center justify-between gap-3">
             <dt className="text-fg-subtle">Curator</dt>
-            <dd className="text-fg">{config.ai_enabled ? config.ai_model : "Offline curator"}</dd>
+            <dd className="text-fg">{config.ai_enabled ? "Moodwave AI" : "Quick mix"}</dd>
           </div>
         </dl>
         {!live ? (

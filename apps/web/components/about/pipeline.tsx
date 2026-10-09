@@ -203,7 +203,7 @@ const STAGES = [
   },
   {
     title: "AI understands the vibe",
-    lede: "Claude reads it like a music supervisor.",
+    lede: "Moodwave reads it like a music supervisor.",
     body: "Your words become a structured intent: moods, an energy curve, tempo, era, vocal texture, and a short note on why it fits. That gives you something you can see and steer.",
     visual: <IntentAssembly />,
   },

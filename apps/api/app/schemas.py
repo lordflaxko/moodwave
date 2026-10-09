@@ -174,7 +174,6 @@ class AppConfigOut(BaseModel):
     demo_allowed: bool
     spotify_enabled: bool
     ai_enabled: bool
-    ai_model: str | None
 
 
 class FeaturedArtist(BaseModel):
