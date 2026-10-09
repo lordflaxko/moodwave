@@ -34,10 +34,9 @@ const ENERGY: { key: EnergyKey; label: string; value: number | null }[] = [
     { key: "peak", label: "Peak", value: 0.9 },
 ]
 
-// Playlist sizes the stepper moves through: fine steps for short mixes, tens for long ones.
-const SIZES = [15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100]
-const stepSize = (value: number, dir: 1 | -1) =>
-    dir === 1 ? (SIZES.find((s) => s > value) ?? value) : ([...SIZES].reverse().find((s) => s < value) ?? value)
+const MIN_SONGS = 15
+const MAX_SONGS = 100
+const clampSongs = (n: number) => Math.min(MAX_SONGS, Math.max(MIN_SONGS, Math.round(n)))
 
 const SERIF = '"Fraunces", "Fraunces Placeholder", Georgia, serif'
 const SANS = '"Inter", "Inter Placeholder", system-ui, sans-serif'
@@ -78,6 +77,112 @@ function useTypewriter(phrases: string[], active: boolean) {
         return () => window.clearTimeout(timer)
     }, [phrases, active])
     return text
+}
+
+/**
+ * Song count: type any number from 15 to 100, or use − / + (hold to speed up).
+ */
+function LengthField({ value, onChange, pill }: { value: number; onChange: (n: number) => void; pill: CSSProperties }) {
+    const [draft, setDraft] = useState(String(value))
+    const latest = useRef(value)
+    const timer = useRef(0)
+    latest.current = value
+
+    useEffect(() => setDraft(String(value)), [value])
+    useEffect(() => () => window.clearTimeout(timer.current), [])
+
+    const commit = () => {
+        const n = Number(draft)
+        const next = Number.isFinite(n) && draft.trim() ? clampSongs(n) : value
+        onChange(next)
+        setDraft(String(next))
+    }
+
+    // Press: step once; keep holding: repeat, getting faster.
+    const startHold = (dir: 1 | -1) => {
+        let delay = 380
+        const tick = () => {
+            const next = clampSongs(latest.current + dir)
+            if (next === latest.current) return
+            latest.current = next
+            onChange(next)
+            delay = Math.max(40, delay * 0.8)
+            timer.current = window.setTimeout(tick, delay)
+        }
+        tick()
+    }
+    const stopHold = () => window.clearTimeout(timer.current)
+
+    const button = (dir: 1 | -1) => {
+        const atEdge = dir === 1 ? value >= MAX_SONGS : value <= MIN_SONGS
+        return (
+            <button
+                type="button"
+                aria-label={dir === 1 ? "More songs" : "Fewer songs"}
+                disabled={atEdge}
+                onPointerDown={(e) => {
+                    e.preventDefault()
+                    startHold(dir)
+                }}
+                onPointerUp={stopHold}
+                onPointerLeave={stopHold}
+                onPointerCancel={stopHold}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        onChange(clampSongs(value + dir))
+                    }
+                }}
+                style={{ ...pill, border: "none", padding: "0 10px", opacity: atEdge ? 0.35 : 1, touchAction: "manipulation" }}
+            >
+                {dir === 1 ? "+" : "−"}
+            </button>
+        )
+    }
+
+    return (
+        <div role="group" aria-label="Playlist length" style={{ ...pill, padding: 0, gap: 0, cursor: "default" }}>
+            {button(-1)}
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: MONO, fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: "#b3ada4" }}>
+                <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    aria-label={`Number of songs, ${MIN_SONGS} to ${MAX_SONGS}`}
+                    value={draft}
+                    maxLength={3}
+                    onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ""))}
+                    onFocus={(e) => e.target.select()}
+                    onBlur={commit}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                            e.preventDefault()
+                            commit()
+                            ;(e.target as HTMLInputElement).blur()
+                        } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                            e.preventDefault()
+                            onChange(clampSongs(value + (e.key === "ArrowUp" ? 1 : -1)))
+                        }
+                    }}
+                    style={{
+                        width: "3ch",
+                        background: "transparent",
+                        border: "none",
+                        borderBottom: "1px dashed rgba(242,239,233,0.2)",
+                        outline: "none",
+                        padding: "2px 0",
+                        textAlign: "center",
+                        color: "#f2efe9",
+                        font: "inherit",
+                        letterSpacing: "0.04em",
+                        fontVariantNumeric: "tabular-nums",
+                    }}
+                />
+                songs
+            </label>
+            {button(1)}
+        </div>
+    )
 }
 
 /**
@@ -275,11 +380,7 @@ export default function Composer(props: ComposerProps) {
                     }}
                 >
                     <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-                        <div role="group" aria-label="Playlist length" style={{ ...pill, padding: 0, gap: 0, cursor: "default" }}>
-                            <button type="button" aria-label="Fewer songs" onClick={() => setLength(stepSize(length, -1))} disabled={length <= SIZES[0]} style={{ ...pill, border: "none", padding: "0 10px", opacity: length <= SIZES[0] ? 0.35 : 1 }}>−</button>
-                            <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: "#b3ada4", minWidth: 72, textAlign: "center" }}>{length} songs</span>
-                            <button type="button" aria-label="More songs" onClick={() => setLength(stepSize(length, 1))} disabled={length >= 100} style={{ ...pill, border: "none", padding: "0 10px", opacity: length >= 100 ? 0.35 : 1 }}>+</button>
-                        </div>
+                        <LengthField value={length} onChange={setLength} pill={pill} />
                         <div role="radiogroup" aria-label="Energy" style={{ display: "flex", borderRadius: 100, background: "rgba(242,239,233,0.04)", padding: 3 }}>
                             {ENERGY.map((e) => {
                                 const active = e.key === energy

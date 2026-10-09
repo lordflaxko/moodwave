@@ -14,10 +14,9 @@ import { cn } from "@/lib/utils";
 
 const MAX_LENGTH = 500;
 
-// Playlist sizes the stepper moves through: fine steps for short mixes, tens for long ones.
-const SIZES = [15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100];
-const stepSize = (value: number, dir: 1 | -1) =>
-  dir === 1 ? (SIZES.find((s) => s > value) ?? value) : ([...SIZES].reverse().find((s) => s < value) ?? value);
+const MIN_SONGS = 15;
+const MAX_SONGS = 100;
+const clampSongs = (n: number) => Math.min(MAX_SONGS, Math.max(MIN_SONGS, Math.round(n)));
 
 type EnergyKey = "auto" | "calm" | "steady" | "lift" | "peak";
 const ENERGY: Record<EnergyKey, number | null> = { auto: null, calm: 0.2, steady: 0.45, lift: 0.68, peak: 0.9 };
@@ -76,30 +75,93 @@ function useTypewriter(phrases: string[], active: boolean) {
   return text;
 }
 
+/** Song count: type any number from 15 to 100, or use − / + (hold to speed up). */
 function LengthStepper({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const [draft, setDraft] = useState(String(value));
+  const latest = useRef(value);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    latest.current = value;
+    setDraft(String(value));
+  }, [value]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const commit = () => {
+    const n = Number(draft);
+    const next = draft.trim() && Number.isFinite(n) ? clampSongs(n) : value;
+    onChange(next);
+    setDraft(String(next));
+  };
+
+  // Press: step once; keep holding: repeat, getting faster.
+  const startHold = (dir: 1 | -1) => {
+    let delay = 380;
+    const tick = () => {
+      const next = clampSongs(latest.current + dir);
+      if (next === latest.current) return;
+      latest.current = next;
+      onChange(next);
+      delay = Math.max(40, delay * 0.8);
+      timer.current = setTimeout(tick, delay);
+    };
+    tick();
+  };
+  const stopHold = () => clearTimeout(timer.current);
+
+  const step = (dir: 1 | -1) => (
+    <button
+      type="button"
+      disabled={dir === 1 ? value >= MAX_SONGS : value <= MIN_SONGS}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        startHold(dir);
+      }}
+      onPointerUp={stopHold}
+      onPointerLeave={stopHold}
+      onPointerCancel={stopHold}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onChange(clampSongs(value + dir));
+        }
+      }}
+      className="grid size-8 touch-manipulation place-items-center rounded-full text-fg-subtle transition hover:text-fg disabled:opacity-30"
+      aria-label={dir === 1 ? "More songs" : "Fewer songs"}
+    >
+      {dir === 1 ? <Plus className="size-3.5" /> : <Minus className="size-3.5" />}
+    </button>
+  );
+
   return (
     <div className="flex items-center rounded-full border border-line-strong" role="group" aria-label="Playlist length">
-      <button
-        type="button"
-        onClick={() => onChange(stepSize(value, -1))}
-        disabled={value <= SIZES[0]}
-        className="grid size-8 place-items-center rounded-full text-fg-subtle transition hover:text-fg disabled:opacity-30"
-        aria-label="Fewer songs"
-      >
-        <Minus className="size-3.5" />
-      </button>
-      <span className="min-w-[4.5rem] text-center font-mono text-[11px] tracking-wider text-fg-muted uppercase tabular-nums" aria-live="polite">
-        {value} songs
-      </span>
-      <button
-        type="button"
-        onClick={() => onChange(stepSize(value, 1))}
-        disabled={value >= SIZES[SIZES.length - 1]}
-        className="grid size-8 place-items-center rounded-full text-fg-subtle transition hover:text-fg disabled:opacity-30"
-        aria-label="More songs"
-      >
-        <Plus className="size-3.5" />
-      </button>
+      {step(-1)}
+      <label className="flex min-w-[4.5rem] items-center justify-center gap-1.5 font-mono text-[11px] tracking-wider text-fg-muted uppercase">
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={3}
+          value={draft}
+          aria-label={`Number of songs, ${MIN_SONGS} to ${MAX_SONGS}`}
+          onChange={(e) => setDraft(e.target.value.replace(/[^0-9]/g, ""))}
+          onFocus={(e) => e.target.select()}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit();
+              e.currentTarget.blur();
+            } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+              e.preventDefault();
+              onChange(clampSongs(value + (e.key === "ArrowUp" ? 1 : -1)));
+            }
+          }}
+          className="w-[3ch] border-b border-dashed border-line-strong bg-transparent py-0.5 text-center text-fg tabular-nums outline-none focus:border-lilac"
+        />
+        songs
+      </label>
+      {step(1)}
     </div>
   );
 }
