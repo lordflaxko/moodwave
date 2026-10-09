@@ -17,6 +17,9 @@ import {
     type Playlist,
 } from "./MoodwaveAPI.tsx"
 
+/** Accent at an opacity; works for hex, rgb() or hsl() values from the colour control. */
+const mix = (color: string, amount: string) => `color-mix(in srgb, ${color} ${amount}, transparent)`
+
 /**
  * Moodwave studio: the engine behind /create. The Composer links here with
  * `?prompt=…&auto=1&length=…&energy=…`; Studio makes sure there's a session (Spotify
@@ -98,7 +101,7 @@ function Overlay({ prompt, accent }: { prompt: string; accent: string }) {
                     height: 620,
                     maxWidth: "120vw",
                     borderRadius: "50%",
-                    background: `radial-gradient(closest-side, ${accent}40, transparent)`,
+                    background: `radial-gradient(closest-side, ${mix(accent, "25%")}, transparent)`,
                     filter: "blur(40px)",
                 }}
             />

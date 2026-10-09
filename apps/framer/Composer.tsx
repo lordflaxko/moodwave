@@ -8,6 +8,9 @@ import {
     type CSSProperties,
 } from "react"
 
+/** Accent at an opacity; works for hex, rgb() or hsl() values from the colour control. */
+const mix = (color: string, amount: string) => `color-mix(in srgb, ${color} ${amount}, transparent)`
+
 /**
  * Moodwave composer: the floating prompt box. Submitting opens the studio page
  * (`/create?prompt=…&auto=1`), where the Studio component generates the playlist.
@@ -151,7 +154,7 @@ export default function Composer(props: ComposerProps) {
                     position: "absolute",
                     inset: -40,
                     borderRadius: 64,
-                    background: `radial-gradient(closest-side, ${accent}48, transparent)`,
+                    background: `radial-gradient(closest-side, ${mix(accent, "28%")}, transparent)`,
                     filter: "blur(28px)",
                     pointerEvents: "none",
                     zIndex: 0,
@@ -164,7 +167,7 @@ export default function Composer(props: ComposerProps) {
                     borderRadius: 32,
                     padding: 8,
                     background: "rgba(18, 16, 21, 0.86)",
-                    border: `1px solid ${focused ? `${accent}5c` : "rgba(242, 239, 233, 0.13)"}`,
+                    border: `1px solid ${focused ? `${mix(accent, "36%")}` : "rgba(242, 239, 233, 0.13)"}`,
                     boxShadow: "0 40px 120px -40px rgba(0,0,0,0.9)",
                     backdropFilter: "blur(20px)",
                     WebkitBackdropFilter: "blur(20px)",
