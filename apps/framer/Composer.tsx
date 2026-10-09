@@ -34,6 +34,11 @@ const ENERGY: { key: EnergyKey; label: string; value: number | null }[] = [
     { key: "peak", label: "Peak", value: 0.9 },
 ]
 
+// Playlist sizes the stepper moves through: fine steps for short mixes, tens for long ones.
+const SIZES = [15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100]
+const stepSize = (value: number, dir: 1 | -1) =>
+    dir === 1 ? (SIZES.find((s) => s > value) ?? value) : ([...SIZES].reverse().find((s) => s < value) ?? value)
+
 const SERIF = '"Fraunces", "Fraunces Placeholder", Georgia, serif'
 const SANS = '"Inter", "Inter Placeholder", system-ui, sans-serif'
 const MONO = '"JetBrains Mono", "JetBrains Mono Placeholder", ui-monospace, monospace'
@@ -93,7 +98,7 @@ export default function Composer(props: ComposerProps) {
     const textareaRef = useRef<HTMLTextAreaElement>(null)
     const [value, setValue] = useState("")
     const [focused, setFocused] = useState(false)
-    const [length, setLength] = useState(24)
+    const [length, setLength] = useState(25)
     const [energy, setEnergy] = useState<EnergyKey>("auto")
     const typed = useTypewriter(phrases, !isStatic && !value && !focused)
     const ready = value.trim().length >= 3
@@ -271,9 +276,9 @@ export default function Composer(props: ComposerProps) {
                 >
                     <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
                         <div role="group" aria-label="Playlist length" style={{ ...pill, padding: 0, gap: 0, cursor: "default" }}>
-                            <button type="button" aria-label="Fewer songs" onClick={() => setLength(Math.max(15, length - 3))} style={{ ...pill, border: "none", padding: "0 10px" }}>−</button>
+                            <button type="button" aria-label="Fewer songs" onClick={() => setLength(stepSize(length, -1))} disabled={length <= SIZES[0]} style={{ ...pill, border: "none", padding: "0 10px", opacity: length <= SIZES[0] ? 0.35 : 1 }}>−</button>
                             <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: "#b3ada4", minWidth: 72, textAlign: "center" }}>{length} songs</span>
-                            <button type="button" aria-label="More songs" onClick={() => setLength(Math.min(30, length + 3))} style={{ ...pill, border: "none", padding: "0 10px" }}>+</button>
+                            <button type="button" aria-label="More songs" onClick={() => setLength(stepSize(length, 1))} disabled={length >= 100} style={{ ...pill, border: "none", padding: "0 10px", opacity: length >= 100 ? 0.35 : 1 }}>+</button>
                         </div>
                         <div role="radiogroup" aria-label="Energy" style={{ display: "flex", borderRadius: 100, background: "rgba(242,239,233,0.04)", padding: 3 }}>
                             {ENERGY.map((e) => {

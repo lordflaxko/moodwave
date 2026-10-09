@@ -51,7 +51,7 @@ function readRequest(): GenerateInput | null {
     const energy = rawEnergy === null ? NaN : Number(rawEnergy)
     return {
         prompt: prompt.slice(0, 500),
-        length: Number.isFinite(length) ? Math.min(30, Math.max(15, Math.round(length))) : 24,
+        length: Number.isFinite(length) ? Math.min(100, Math.max(15, Math.round(length))) : 25,
         energy: Number.isFinite(energy) && energy >= 0 && energy <= 1 ? energy : null,
         allow_explicit: true,
         use_my_taste: false,
@@ -65,7 +65,7 @@ function clearTrigger() {
     history.replaceState(null, "", url.pathname + url.search)
 }
 
-function Overlay({ prompt, accent }: { prompt: string; accent: string }) {
+function Overlay({ prompt, accent, length }: { prompt: string; accent: string; length: number }) {
     const [step, setStep] = useState(0)
     useEffect(() => {
         const id = window.setInterval(() => setStep((s) => Math.min(s + 1, STEPS.length - 1)), 2600)
@@ -134,6 +134,11 @@ function Overlay({ prompt, accent }: { prompt: string; accent: string }) {
                         {STEPS[step]}…
                     </motion.div>
                 </AnimatePresence>
+                {length > 40 ? (
+                    <p style={{ fontFamily: SANS, fontSize: 13, color: C.faint, margin: "14px 0 0" }}>
+                        {length} songs is a big one — this can take a minute or two.
+                    </p>
+                ) : null}
                 <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 18 }}>
                     {STEPS.map((_, i) => (
                         <span key={i} style={{ width: 18, height: 2, borderRadius: 2, background: i <= step ? accent : C.line2, transition: "background 0.5s ease" }} />
@@ -247,7 +252,7 @@ export default function Studio(props: StudioProps) {
 
     return (
         <div style={{ position: "relative", width: "100%", ...props.style, height: "auto" }}>
-            <AnimatePresence>{phase.kind === "running" ? <Overlay key="overlay" prompt={phase.input.prompt} accent={accent} /> : null}</AnimatePresence>
+            <AnimatePresence>{phase.kind === "running" ? <Overlay key="overlay" prompt={phase.input.prompt} accent={accent} length={phase.input.length} /> : null}</AnimatePresence>
 
             <AnimatePresence mode="wait">
                 {phase.kind === "auth" ? (

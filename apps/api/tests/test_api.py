@@ -140,7 +140,8 @@ def test_full_playlist_lifecycle(demo_client):
 
 def test_validation_errors(demo_client):
     assert demo_client.post("/playlists/generate", json={"prompt": "x"}).status_code == 422
-    assert demo_client.post("/playlists/generate", json={"prompt": "chill", "length": 99}).status_code == 422
+    assert demo_client.post("/playlists/generate", json={"prompt": "chill", "length": 101}).status_code == 422
+    assert demo_client.post("/playlists/generate", json={"prompt": "chill", "length": 14}).status_code == 422
 
 
 def test_login_only_returns_to_allowed_origins(client):

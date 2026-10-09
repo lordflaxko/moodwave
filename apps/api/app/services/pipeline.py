@@ -8,6 +8,7 @@ the AI for more songs, then by intent-driven discovery search.
 
 import asyncio
 import logging
+import math
 import re
 from dataclasses import dataclass
 
@@ -22,6 +23,7 @@ from app.services.spotify.base import SpotifyClient, SpotifyError
 log = logging.getLogger(__name__)
 
 _RESOLVE_CONCURRENCY = 8
+# Songs allowed per lead artist, before scaling up for long playlists (see `artist_cap`).
 _MAX_PER_ARTIST = 2
 _MIN_DURATION_MS = 60_000
 _MAX_DURATION_MS = 12 * 60_000
@@ -88,6 +90,13 @@ async def resolve(candidates: list[Candidate], spotify: SpotifyClient) -> list[T
     return [track for track in resolved if track is not None]
 
 
+def artist_cap(limit: int, single_artist_request: bool) -> int:
+    """How many songs one lead artist may have: 2 in a 24-song mix, 5 in a 100-song one."""
+    if single_artist_request:
+        return max(4, math.ceil(limit / 8))
+    return max(_MAX_PER_ARTIST, math.ceil(limit / 24))
+
+
 def filter_tracks(
     tracks: list[Track], intent: MusicalIntent, limit: int, seed: list[Track] | None = None
 ) -> list[Track]:
@@ -99,7 +108,7 @@ def filter_tracks(
     for t in kept:
         per_artist[t.artists[0]] = per_artist.get(t.artists[0], 0) + 1
     single_artist_request = len(intent.reference_artists) == 1
-    cap = 4 if single_artist_request else _MAX_PER_ARTIST
+    cap = artist_cap(limit, single_artist_request)
 
     for track in tracks:
         if len(kept) >= limit:

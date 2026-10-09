@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field
 
 Vocals = Literal["any", "female", "male", "mixed", "instrumental"]
 
+MIN_TRACKS = 15
+MAX_TRACKS = 100
+
 
 class Track(BaseModel):
     id: str = Field(description="Spotify track id (or catalog id in demo mode)")
@@ -74,7 +77,7 @@ class RefinementPlan(BaseModel):
 
 class GenerateRequest(BaseModel):
     prompt: str = Field(min_length=3, max_length=500)
-    length: int = Field(default=24, ge=15, le=30)
+    length: int = Field(default=24, ge=MIN_TRACKS, le=MAX_TRACKS)
     energy: float | None = Field(default=None, ge=0, le=1, description="Optional energy override")
     allow_explicit: bool = True
     use_my_taste: bool = False
@@ -92,7 +95,7 @@ class UpdatePlaylistRequest(BaseModel):
 class ReplaceTracksRequest(BaseModel):
     """Full ordered track list; used for reorder, remove and manual add."""
 
-    tracks: list[Track] = Field(min_length=1, max_length=50)
+    tracks: list[Track] = Field(min_length=1, max_length=MAX_TRACKS + 20)
 
 
 # --- Responses -------------------------------------------------------------------------------

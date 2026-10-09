@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     # --- Generation limits -------------------------------------------------------
     generate_rate_limit_per_minute: int = 8
     min_tracks: int = 15
-    max_tracks: int = 30
+    max_tracks: int = 100
 
     @property
     def allowed_origins(self) -> list[str]:

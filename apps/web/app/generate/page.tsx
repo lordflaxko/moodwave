@@ -56,7 +56,7 @@ function readAutoStart(params: URLSearchParams): AutoStart | undefined {
   const length = rawLength === null ? NaN : Number(rawLength);
   const energy = rawEnergy === null ? NaN : Number(rawEnergy);
   return {
-    length: Number.isFinite(length) ? Math.min(30, Math.max(15, Math.round(length))) : 24,
+    length: Number.isFinite(length) ? Math.min(100, Math.max(15, Math.round(length))) : 25,
     energy: Number.isFinite(energy) && energy >= 0 && energy <= 1 ? energy : null,
   };
 }

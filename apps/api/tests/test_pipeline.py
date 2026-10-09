@@ -3,7 +3,7 @@
 from app.schemas import Candidate, MusicalIntent, PlaylistPlan, Track
 from app.services.ai.base import AIError
 from app.services.ai.heuristic import HeuristicProvider, interpret
-from app.services.pipeline import PlaylistPipeline, filter_tracks, is_match, normalize
+from app.services.pipeline import PlaylistPipeline, artist_cap, filter_tracks, is_match, normalize
 from app.services.spotify.mock import MockSpotifyClient
 
 
@@ -43,6 +43,18 @@ def test_filter_enforces_explicit_and_artist_cap():
     tracks = [_track(1, "A"), _track(2, "A"), _track(3, "A"), _track(4, "B", explicit=True), _track(5, "C")]
     kept = filter_tracks(tracks, _intent(explicit_allowed=False), limit=10)
     assert [t.id for t in kept] == ["t1", "t2", "t5"]
+
+
+def test_artist_cap_grows_with_playlist_length():
+    assert artist_cap(24, single_artist_request=False) == 2
+    assert artist_cap(100, single_artist_request=False) == 5
+    assert artist_cap(24, single_artist_request=True) == 4
+    assert artist_cap(100, single_artist_request=True) == 13
+
+    tracks = [_track(i, "A") for i in range(10)] + [_track(100 + i, f"Other {i}") for i in range(95)]
+    kept = filter_tracks(tracks, _intent(), limit=100)
+    assert len(kept) == 100
+    assert sum(1 for t in kept if t.artists == ["A"]) == 5
 
 
 def test_interpret_extracts_constraints():
