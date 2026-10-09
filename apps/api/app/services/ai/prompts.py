@@ -112,7 +112,7 @@ def plan_message(
 ) -> str:
     lines = [
         f"<request>{prompt}</request>",
-        f"Target playlist length: {target} songs. Propose {target + 14} candidates in listening order "
+        f"Target playlist length: {target} songs. Propose {target + max(14, target // 5)} candidates in listening order "
         "(extras absorb songs that can't be found on Spotify).",
         f"Explicit songs allowed: {'yes' if allow_explicit else 'no - set explicit_allowed to false and avoid explicit songs'}.",
     ]

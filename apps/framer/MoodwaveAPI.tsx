@@ -6,7 +6,7 @@ import { useEffect, useState } from "react"
  */
 
 // The deployed FastAPI service. Change this one line after deploying.
-export const API_URL = "http://127.0.0.1:8000"
+export const API_URL = "https://moodwave-api.onrender.com"
 
 // --- Design tokens (match the site's colour styles) -------------------------------------
 export const C = {

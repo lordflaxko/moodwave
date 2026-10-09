@@ -20,6 +20,9 @@ import {
     type Track,
 } from "./MoodwaveAPI.tsx"
 
+/** Accent at an opacity; works for hex, rgb() or hsl() values from the colour control. */
+const mix = (color: string, amount: string) => `color-mix(in srgb, ${color} ${amount}, transparent)`
+
 /**
  * Moodwave playlist page (`/playlist?id=…`): cover collage, the AI's read on the mood,
  * every track with its reason, "make it more…" refinements, an embedded Spotify
@@ -79,7 +82,7 @@ function EnergyCurve({ points, accent }: { points: number[]; accent: string }) {
     const d = points.map((p, i) => `${i ? "L" : "M"}${(i * step).toFixed(1)},${(h - 4 - p * (h - 8)).toFixed(1)}`).join(" ")
     return (
         <svg width="100%" height={h} viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" aria-label="Energy across the playlist" role="img">
-            <path d={`${d} L${w},${h} L0,${h} Z`} fill={`${accent}1f`} />
+            <path d={`${d} L${w},${h} L0,${h} Z`} style={{ fill: mix(accent, "12%") }} />
             <path d={d} fill="none" stroke={accent} strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
         </svg>
     )

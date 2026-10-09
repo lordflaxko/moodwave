@@ -40,12 +40,18 @@ class ClaudeProvider:
 
     def __init__(self, settings: Settings, client: anthropic.AsyncAnthropic | None = None):
         self._settings = settings
-        self._client = client or anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key, max_retries=2, timeout=90)
+        self._client = client or anthropic.AsyncAnthropic(
+            # 100-song plans can take a couple of minutes to write.
+            api_key=settings.anthropic_api_key,
+            max_retries=2,
+            timeout=240,
+        )
 
     async def _structured(self, user_message: str, schema: dict, effort: str) -> dict[str, Any]:
         kwargs: dict[str, Any] = {
             "model": self._settings.anthropic_model,
-            "max_tokens": 16000,
+            # Room for thinking plus ~120 candidates; the SDK's non-streaming ceiling is ~21k.
+            "max_tokens": 20000,
             # Static system prompt first so the prefix is cacheable across requests.
             "system": [{"type": "text", "text": prompts.SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
             "messages": [{"role": "user", "content": user_message}],

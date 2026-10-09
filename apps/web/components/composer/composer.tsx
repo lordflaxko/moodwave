@@ -14,6 +14,11 @@ import { cn } from "@/lib/utils";
 
 const MAX_LENGTH = 500;
 
+// Playlist sizes the stepper moves through: fine steps for short mixes, tens for long ones.
+const SIZES = [15, 20, 25, 30, 40, 50, 60, 70, 80, 90, 100];
+const stepSize = (value: number, dir: 1 | -1) =>
+  dir === 1 ? (SIZES.find((s) => s > value) ?? value) : ([...SIZES].reverse().find((s) => s < value) ?? value);
+
 type EnergyKey = "auto" | "calm" | "steady" | "lift" | "peak";
 const ENERGY: Record<EnergyKey, number | null> = { auto: null, calm: 0.2, steady: 0.45, lift: 0.68, peak: 0.9 };
 const energyKeyFor = (value: number | null): EnergyKey =>
@@ -76,8 +81,8 @@ function LengthStepper({ value, onChange }: { value: number; onChange: (v: numbe
     <div className="flex items-center rounded-full border border-line-strong" role="group" aria-label="Playlist length">
       <button
         type="button"
-        onClick={() => onChange(Math.max(15, value - 3))}
-        disabled={value <= 15}
+        onClick={() => onChange(stepSize(value, -1))}
+        disabled={value <= SIZES[0]}
         className="grid size-8 place-items-center rounded-full text-fg-subtle transition hover:text-fg disabled:opacity-30"
         aria-label="Fewer songs"
       >
@@ -88,8 +93,8 @@ function LengthStepper({ value, onChange }: { value: number; onChange: (v: numbe
       </span>
       <button
         type="button"
-        onClick={() => onChange(Math.min(30, value + 3))}
-        disabled={value >= 30}
+        onClick={() => onChange(stepSize(value, 1))}
+        disabled={value >= SIZES[SIZES.length - 1]}
         className="grid size-8 place-items-center rounded-full text-fg-subtle transition hover:text-fg disabled:opacity-30"
         aria-label="More songs"
       >
@@ -119,7 +124,7 @@ export function Composer({
   const id = useId();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [focused, setFocused] = useState(false);
-  const [length, setLength] = useState(autoStart?.length ?? 24);
+  const [length, setLength] = useState(autoStart?.length ?? 25);
   const [energy, setEnergy] = useState<EnergyKey>(() => energyKeyFor(autoStart?.energy ?? null));
   const [clean, setClean] = useState(false);
   const [useTaste, setUseTaste] = useState(false);
