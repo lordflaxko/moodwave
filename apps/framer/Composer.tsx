@@ -28,12 +28,12 @@ interface ComposerProps {
     style?: CSSProperties
 }
 
-const ENERGY: { key: EnergyKey; label: string; value: number | null }[] = [
-    { key: "auto", label: "Auto", value: null },
-    { key: "calm", label: "Calm", value: 0.2 },
-    { key: "steady", label: "Steady", value: 0.45 },
-    { key: "lift", label: "Lift", value: 0.68 },
-    { key: "peak", label: "Peak", value: 0.9 },
+const ENERGY: { key: EnergyKey; label: string; value: number | null; hint: string }[] = [
+    { key: "auto", label: "Auto", value: null, hint: "Let your words set the energy." },
+    { key: "calm", label: "Calm", value: 0.2, hint: "Soft and slow — winding down, reading, falling asleep." },
+    { key: "steady", label: "Steady", value: 0.45, hint: "An easy, even groove — focus, cooking, a long drive." },
+    { key: "lift", label: "Lift", value: 0.68, hint: "Upbeat and bright — getting ready, a sunny walk, chores." },
+    { key: "peak", label: "Peak", value: 0.9, hint: "Full energy — workouts, parties, big choruses." },
 ]
 
 // A pasted Spotify song or playlist link becomes the seed ("start from this").
@@ -212,6 +212,8 @@ function ComposerInner(props: ComposerProps) {
     const [focused, setFocused] = useState(false)
     const [length, setLength] = useState(25)
     const [energy, setEnergy] = useState<EnergyKey>("auto")
+    // Hovering or focusing an energy option previews its description.
+    const [energyPeek, setEnergyPeek] = useState<EnergyKey | null>(null)
     const [seed, setSeed] = useState<{ url: string; kind: string } | null>(null)
     const [taste, setTaste] = useState(false)
     const session = useSession(!isStatic)
@@ -477,7 +479,7 @@ function ComposerInner(props: ComposerProps) {
                                 Blend my taste
                             </button>
                         ) : null}
-                        <div role="radiogroup" aria-label="Energy" style={{ display: "flex", borderRadius: 100, background: "rgba(242,239,233,0.04)", padding: 3 }}>
+                        <div role="radiogroup" aria-label="Energy" aria-describedby="mw-energy-hint" onMouseLeave={() => setEnergyPeek(null)} style={{ display: "flex", borderRadius: 100, background: "rgba(242,239,233,0.04)", padding: 3 }}>
                             {ENERGY.map((e) => {
                                 const active = e.key === energy
                                 return (
@@ -487,6 +489,9 @@ function ComposerInner(props: ComposerProps) {
                                         role="radio"
                                         aria-checked={active}
                                         onClick={() => setEnergy(e.key)}
+                                        onMouseEnter={() => setEnergyPeek(e.key)}
+                                        onFocus={() => setEnergyPeek(e.key)}
+                                        onBlur={() => setEnergyPeek(null)}
                                         style={{
                                             border: "none",
                                             borderRadius: 100,
@@ -535,6 +540,15 @@ function ComposerInner(props: ComposerProps) {
                         </span>
                     </motion.button>
                 </div>
+                <p
+                    id="mw-energy-hint"
+                    style={{ margin: 0, padding: "2px 16px 10px", minHeight: 18, fontFamily: SANS, fontSize: 12.5, lineHeight: 1.45, color: "#99938a", transition: "color 0.2s ease" }}
+                >
+                    <span style={{ fontFamily: MONO, fontSize: 10.5, letterSpacing: "0.12em", textTransform: "uppercase", color: energyPeek && energyPeek !== energy ? "#99938a" : accent, marginRight: 8 }}>
+                        {(ENERGY.find((e) => e.key === (energyPeek ?? energy)) ?? ENERGY[0]).label} energy
+                    </span>
+                    {(ENERGY.find((e) => e.key === (energyPeek ?? energy)) ?? ENERGY[0]).hint}
+                </p>
             </div>
         </motion.form>
     )
