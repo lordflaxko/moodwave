@@ -977,7 +977,8 @@ function PlaylistViewInner(props: PlaylistViewProps) {
         )
     }
 
-    const canSave = session.user && !session.user.is_demo && session.config?.spotify_enabled
+    const isGuest = Boolean(session.user?.is_guest)
+    const canSave = session.user && !session.user.is_demo && !isGuest && session.config?.spotify_enabled
     const covers: (string | null)[] = playlist.cover?.images?.length ? playlist.cover.images : playlist.tracks.map((t: Track) => t.image_url)
     const editable = Boolean(session.user)
     const queue = queueOf(order)
@@ -1090,6 +1091,16 @@ function PlaylistViewInner(props: PlaylistViewProps) {
                                 style={{ ...pill, background: accent, color: C.ink, border: "none", fontWeight: 500, height: 42, padding: "0 18px" }}
                             >
                                 {playingHere && player.playing ? "❚❚ Pause" : playingHere ? "▶ Resume" : "▶ Play all"}
+                            </button>
+                        ) : null}
+                        {isGuest && session.config?.spotify_enabled ? (
+                            <button
+                                type="button"
+                                onClick={() => signIn()}
+                                title="Sign in with Spotify to save. Your guest playlists move to your account."
+                                style={{ ...pill, background: C.text, color: C.ink, border: "none", fontWeight: 500, height: 42, padding: "0 18px" }}
+                            >
+                                <span style={{ width: 8, height: 8, borderRadius: 8, background: "#1ed760" }} /> Connect Spotify to save
                             </button>
                         ) : null}
                         {canSave ? (

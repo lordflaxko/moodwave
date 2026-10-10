@@ -37,12 +37,17 @@ export interface User {
     display_name: string
     avatar_url: string | null
     is_demo: boolean
+    /** Trying Moodwave without Spotify: limits apply, nothing saves to Spotify. */
+    is_guest?: boolean
 }
 export interface AppConfig {
     demo_mode: boolean
     demo_allowed?: boolean
     spotify_enabled: boolean
     ai_enabled: boolean
+    guest_allowed?: boolean
+    guest_playlists_per_day?: number
+    guest_max_tracks?: number
     ai_model: string | null
 }
 export interface Track {
@@ -235,7 +240,8 @@ async function boot() {
         try {
             const out = await api<{ token: string; user: User }>("/auth/exchange", {
                 method: "POST",
-                body: JSON.stringify({ code }),
+                // A guest session in this browser hands its playlists to the account.
+                body: JSON.stringify({ code, guest_token: getToken() }),
             })
             setToken(out.token)
         } catch (e) {
@@ -259,7 +265,7 @@ async function boot() {
 
 const AUTH_ERRORS: Record<string, string> = {
     access_denied: "Spotify sign-in was cancelled.",
-    not_allowlisted: "This Spotify account isn’t on the app’s allow-list yet.",
+    not_allowlisted: "Moodwave is invite-only on Spotify for now, so that account can’t sign in yet. You can still try it as a guest.",
     invalid_state: "That sign-in link expired. Please try again.",
     token_exchange_failed: "Spotify didn’t accept the sign-in. Please try again.",
 }
@@ -289,6 +295,23 @@ export async function startDemo(): Promise<User> {
     setToken(out.token)
     updateSession({ user: out.user })
     return out.user
+}
+
+/** Try Moodwave without Spotify (real catalogue and AI, daily limits, nothing saved). */
+export async function startGuest(): Promise<User> {
+    const out = await api<{ token: string; user: User }>("/auth/guest/token", { method: "POST" })
+    setToken(out.token)
+    updateSession({ user: out.user, error: null })
+    return out.user
+}
+
+export function clearAuthError() {
+    updateSession({ error: null })
+    const url = new URL(window.location.href)
+    if (url.searchParams.has("auth_error")) {
+        url.searchParams.delete("auth_error")
+        history.replaceState(null, "", url.pathname + url.search)
+    }
 }
 
 export function signOut() {

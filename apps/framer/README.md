@@ -81,3 +81,14 @@ window event, or opens `/create?prompt=…` when the page has no Composer.
 - **Contrast:** Subtle `#99938a` and Faint `#858079` pass 4.5:1 on the ink, surface and
   surface-2 backgrounds (Framer colour styles and `C` tokens match).
 - Generation progress announces stage changes only (a hidden `role="status"`), not every tick.
+
+### Guest mode
+
+Spotify keeps the app in development mode (only allow-listed accounts can sign in), so
+visitors can **try it as a guest** (`startGuest()` → `POST /auth/guest/token`):
+real Spotify catalogue via the API's app token, the real AI within limits (5 playlists a
+day each, 30 songs, a shared daily AI budget; then the offline curator), no saving to
+Spotify. Signing in with Spotify later moves guest playlists into the account (the guest
+token is sent with `/auth/exchange`). Sign-in errors, e.g. not allow-listed, show as a
+notice under the nav (AccountChip) with a "Try as a guest" button. Settings:
+`ALLOW_GUEST`, `GUEST_PLAYLISTS_PER_DAY`, `GUEST_AI_PER_DAY`, `GUEST_MAX_TRACKS`.

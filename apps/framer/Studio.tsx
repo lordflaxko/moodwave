@@ -13,6 +13,7 @@ import {
     signIn,
     sized,
     startDemo,
+    startGuest,
     StreamUnavailable,
     streamGenerate,
     useFeaturedCovers,
@@ -406,6 +407,9 @@ function StudioInner(props: StudioProps) {
     }
 
     const demoAllowed = Boolean(sessionState.config?.demo_allowed ?? true)
+    const guestAllowed = Boolean(sessionState.config?.guest_allowed)
+    const perDay = sessionState.config?.guest_playlists_per_day ?? 5
+    const guestMax = sessionState.config?.guest_max_tracks ?? 30
     const spotifyEnabled = Boolean(sessionState.config?.spotify_enabled)
 
     return (
@@ -428,6 +432,28 @@ function StudioInner(props: StudioProps) {
                                     <span style={{ width: 8, height: 8, borderRadius: 8, background: "#1ed760" }} /> Continue with Spotify
                                 </button>
                             ) : null}
+                            {guestAllowed ? (
+                                <button
+                                    type="button"
+                                    onClick={async () => {
+                                        try {
+                                            await startGuest()
+                                            clearTrigger()
+                                            void run(phase.input)
+                                        } catch (e) {
+                                            setPhase({ kind: "error", message: (e as Error).message, input: phase.input })
+                                        }
+                                    }}
+                                    style={{ ...ghostButton, width: "100%", color: C.text }}
+                                >
+                                    Try it as a guest
+                                </button>
+                            ) : null}
+                            {guestAllowed ? (
+                                <p style={{ fontSize: 12.5, color: C.subtle, margin: "2px 0 0", lineHeight: 1.5 }}>
+                                    No account needed · up to {perDay} playlists a day, {guestMax} songs each · connect Spotify later and they come with you.
+                                </p>
+                            ) : null}
                             {demoAllowed ? (
                                 <button
                                     type="button"
@@ -446,7 +472,6 @@ function StudioInner(props: StudioProps) {
                                 </button>
                             ) : null}
                         </div>
-                        {sessionState.error ? <p style={{ color: C.amber, fontSize: 13, margin: "16px 0 0" }}>{sessionState.error}</p> : null}
                     </motion.div>
                 ) : phase.kind === "error" ? (
                     <motion.div key="error" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.6, ease: EASE }} style={card}>
