@@ -106,3 +106,20 @@ Keep the Privacy page in step with the code if what's stored or shared changes.
 The layout template footer links (Create, Library, How it works, FAQ, Privacy, Terms, GitHub)
 sit in one row on desktop and tablet and wrap onto two lines on phone. The GitHub link uses
 Phosphor's "Github Logo" icon and opens the repo in a new tab.
+
+### Buttons
+
+Code components use `Btn` and `Icon` from `MoodwaveAPI.tsx` instead of hand-styled buttons:
+
+| Variant | Use for | Look |
+| --- | --- | --- |
+| `accent` | The main action (Play all, Make your own, Save cover, Try again) | Lilac fill, glow and sheen on hover |
+| `spotify` | Anything that goes to Spotify (Save, Open in, Connect) | Spotify green (#1ED760), black Spotify icon mark and text |
+| `light` | A strong secondary action (Update on Spotify, Make your own on shared pages) | Cream fill |
+| `ghost` | Secondary actions (Share, New playlist, Refresh, Try as a guest) | Hairline border, lights up on hover |
+| `danger` | Destructive actions (Delete, Turn off link, Delete account) | Ghost that warms to amber on hover |
+| `quiet` | Tight spots and menu items | No border |
+
+`<Btn variant icon iconRight size busy href>`: sizes `sm`/`md`/`lg`, `busy` swaps the icon for a
+spinner, `href` renders a link. Icons react on hover (arrows slide, ▶ pops, ↻ spins). Native Framer
+buttons on the pages use the matching hover lift + glow + press and Phosphor icons.

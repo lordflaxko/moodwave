@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { useEffect, useRef, useState, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
 
-import { C, EASE, SANS, signIn, signOut, useSession, Safe, startGuest, clearAuthError, deleteAccount } from "./MoodwaveAPI.tsx"
+import { C, EASE, SANS, signIn, signOut, useSession, Safe, startGuest, clearAuthError, deleteAccount, Btn } from "./MoodwaveAPI.tsx"
 
 /** Nav status pill: "Connect Spotify" when signed out, the account (with sign-out) when in. */
 
@@ -56,9 +56,11 @@ function AuthNotice({ message, canGuest }: { message: string; canGuest: boolean 
                 <span style={{ flex: "1 1 260px" }}>{message}</span>
                 <span style={{ display: "flex", gap: 6 }}>
                     {canGuest ? (
-                        <button
-                            type="button"
-                            disabled={busy}
+                        <Btn
+                            variant="accent"
+                            size="sm"
+                            icon="user"
+                            busy={busy}
                             onClick={async () => {
                                 setBusy(true)
                                 try {
@@ -67,14 +69,11 @@ function AuthNotice({ message, canGuest }: { message: string; canGuest: boolean 
                                     setBusy(false)
                                 }
                             }}
-                            style={{ ...chip, height: 36, border: "none", background: C.lilac, color: C.ink }}
                         >
                             {busy ? "Starting…" : "Try as a guest"}
-                        </button>
+                        </Btn>
                     ) : null}
-                    <button type="button" aria-label="Dismiss" onClick={clearAuthError} style={{ ...chip, height: 36, padding: "0 12px", border: `1px solid ${C.line2}`, background: "transparent", color: C.muted }}>
-                        ×
-                    </button>
+                    <Btn variant="ghost" size="sm" icon="close" aria-label="Dismiss" onClick={clearAuthError} style={{ width: 34, padding: 0 }} />
                 </span>
             </div>
         </motion.div>,
@@ -115,9 +114,9 @@ function AccountChipInner(props: AccountChipProps) {
         return (
             <div style={base}>
                 {notice}
-                <button type="button" onClick={() => signIn()} style={{ ...chip, border: "none", background: C.text, color: C.ink }}>
-                    <Dot color="#1ed760" /> Connect Spotify
-                </button>
+                <Btn variant="spotify" icon="spotify" onClick={() => signIn()} style={{ height: 40 }}>
+                    Connect Spotify
+                </Btn>
             </div>
         )
     }
@@ -157,32 +156,36 @@ function AccountChipInner(props: AccountChipProps) {
                             </div>
                         </div>
                         {!live && session.config?.spotify_enabled ? (
-                            <button type="button" role="menuitem" onClick={() => signIn()} style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 10px", borderRadius: 10, border: "none", background: "transparent", color: C.text, fontSize: 14, cursor: "pointer" }}>
+                            <Btn variant="quiet" size="sm" role="menuitem" icon="spotify" onClick={() => signIn()} style={{ width: "100%", justifyContent: "flex-start", borderRadius: 10, height: 38, padding: "0 12px" }}>
                                 Connect Spotify
-                            </button>
+                            </Btn>
                         ) : null}
-                        <button
-                            type="button"
+                        <Btn
+                            variant="quiet"
+                            size="sm"
                             role="menuitem"
+                            icon="sign-out"
                             onClick={() => {
                                 signOut()
                                 setOpen(false)
                             }}
-                            style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 10px", borderRadius: 10, border: "none", background: "transparent", color: C.muted, fontSize: 14, cursor: "pointer" }}
+                            style={{ width: "100%", justifyContent: "flex-start", borderRadius: 10, height: 38, padding: "0 12px" }}
                         >
                             {guest ? "Leave guest mode" : "Sign out"}
-                        </button>
-                        <button
-                            type="button"
+                        </Btn>
+                        <Btn
+                            variant="danger"
+                            size="sm"
                             role="menuitem"
+                            icon="trash"
                             onClick={() => {
                                 setOpen(false)
                                 void deleteAccount().catch((e: Error) => window.alert(e.message))
                             }}
-                            style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 10px", borderRadius: 10, border: "none", background: "transparent", color: C.amber, fontSize: 13, cursor: "pointer" }}
+                            style={{ width: "100%", justifyContent: "flex-start", borderRadius: 10, height: 38, padding: "0 12px", borderColor: "transparent" }}
                         >
                             Delete my account and data
-                        </button>
+                        </Btn>
                     </motion.div>
                 ) : null}
             </AnimatePresence>

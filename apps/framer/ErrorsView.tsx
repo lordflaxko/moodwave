@@ -1,7 +1,18 @@
 import { addPropertyControls, useIsStaticRenderer } from "framer"
 import { useEffect, useState, type CSSProperties } from "react"
 
-import { api, C, MONO, relativeTime, Safe, SANS, SERIF, signIn, useSession } from "./MoodwaveAPI.tsx"
+import {
+    api,
+    C,
+    MONO,
+    relativeTime,
+    Safe,
+    SANS,
+    SERIF,
+    signIn,
+    useSession,
+    Btn,
+} from "./MoodwaveAPI.tsx"
 
 /**
  * Private error log (/errors): crashes reported by the site and unexpected API failures,
@@ -46,9 +57,9 @@ function ErrorsViewInner(props: ErrorsViewProps) {
         return (
             <div style={{ ...root, ...box }}>
                 <p style={{ margin: "0 0 14px", color: C.muted }}>Sign in with Spotify to view the error log.</p>
-                <button type="button" onClick={() => signIn()} style={{ height: 42, borderRadius: 100, border: "none", padding: "0 18px", background: C.text, color: C.ink, fontWeight: 500, cursor: "pointer" }}>
+                <Btn variant="spotify" icon="spotify" onClick={() => signIn()}>
                     Continue with Spotify
-                </button>
+                </Btn>
             </div>
         )
     if (error) return <div style={{ ...root, ...box, color: C.amber }}>{error}</div>
@@ -60,9 +71,9 @@ function ErrorsViewInner(props: ErrorsViewProps) {
                 <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: C.subtle }}>
                     {groups.length ? `${groups.reduce((n, g) => n + g.count, 0)} errors · ${groups.length} kinds` : "No errors"}
                 </span>
-                <button type="button" onClick={load} style={{ height: 34, borderRadius: 100, padding: "0 14px", border: `1px solid ${C.line2}`, background: "transparent", color: C.muted, cursor: "pointer" }}>
+                <Btn variant="ghost" size="sm" icon="refresh" onClick={load}>
                     Refresh
-                </button>
+                </Btn>
             </div>
             {groups.length === 0 ? (
                 <div style={{ ...box, textAlign: "center", padding: 40 }}>

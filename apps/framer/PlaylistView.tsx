@@ -6,6 +6,7 @@ import { createPortal } from "react-dom"
 import {
     API_URL,
     api,
+    Btn,
     C,
     Collage,
     duration,
@@ -507,9 +508,9 @@ function CoverEditor({ playlist, accent, onClose, onSaved }: { playlist: Playlis
                                     : "Use any image. It's cropped to a square from the centre."}
                         </p>
                         {mode === "upload" ? (
-                            <button type="button" onClick={() => fileRef.current?.click()} style={{ ...pill, marginTop: 12, color: C.text }}>
+                            <Btn variant="ghost" size="sm" icon="image" onClick={() => fileRef.current?.click()} style={{ marginTop: 12 }}>
                                 {upload || existingUpload ? "Choose a different image" : "Choose an image"}
-                            </button>
+                            </Btn>
                         ) : null}
                     </div>
                 </div>
@@ -568,12 +569,12 @@ function CoverEditor({ playlist, accent, onClose, onSaved }: { playlist: Playlis
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 20, paddingTop: 16, borderTop: `1px solid ${C.line}`, flexWrap: "wrap" }}>
                     <span style={{ fontSize: 12.5, color: C.faint }}>{playlist.spotify_url ? "Then use “Update on Spotify” to change it there too." : "Used when you save to Spotify."}</span>
                     <span style={{ display: "flex", gap: 8 }}>
-                        <button type="button" onClick={onClose} style={{ ...pill, height: 40 }}>
+                        <Btn variant="quiet" onClick={onClose}>
                             Cancel
-                        </button>
-                        <button type="button" disabled={!ready || saving} onClick={() => void save()} style={{ ...pill, height: 40, border: "none", fontWeight: 500, background: ready ? accent : "rgba(242,239,233,0.06)", color: ready ? C.ink : C.faint, cursor: ready ? "pointer" : "default" }}>
+                        </Btn>
+                        <Btn variant="accent" accent={accent} icon="check" busy={saving} disabled={!ready} onClick={() => void save()}>
                             {saving ? "Saving…" : "Save cover"}
-                        </button>
+                        </Btn>
                     </span>
                 </div>
             </motion.div>
@@ -667,28 +668,28 @@ function SharePanel({ playlist, accent, onClose, onChange }: { playlist: Playlis
                     onFocus={(e) => e.currentTarget.select()}
                     style={{ flex: 1, minWidth: 0, height: 40, borderRadius: 100, border: `1px solid ${C.line2}`, background: C.ink, color: C.text, padding: "0 14px", fontFamily: MONO, fontSize: 12, outline: "none" }}
                 />
-                <button type="button" disabled={!link} onClick={() => void copy()} style={{ ...pill, height: 40, background: accent, color: C.ink, border: "none", fontWeight: 500 }}>
-                    {copied ? "Copied ✓" : "Copy"}
-                </button>
+                <Btn variant="accent" accent={accent} icon={copied ? "check" : "copy"} disabled={!link} onClick={() => void copy()}>
+                    {copied ? "Copied" : "Copy"}
+                </Btn>
             </div>
             <p style={{ fontSize: 12.5, lineHeight: 1.5, color: C.subtle, margin: "10px 0 0" }}>Shows the cover and title when pasted into chats. They see the songs and can play them; they can’t edit.</p>
             {error ? <p style={{ fontSize: 13, color: C.amber, margin: "8px 0 0" }}>{error}</p> : null}
             <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
                 {canNativeShare && link ? (
-                    <button type="button" onClick={() => void nativeShare()} style={{ ...pill, height: 34 }}>
+                    <Btn variant="ghost" size="sm" icon="share" onClick={() => void nativeShare()}>
                         Share…
-                    </button>
+                    </Btn>
                 ) : link ? (
-                    <a href={link} target="_blank" rel="noreferrer" style={{ ...pill, height: 34, textDecoration: "none" }}>
-                        Preview ↗
-                    </a>
+                    <Btn variant="ghost" size="sm" iconRight="external" href={link} target="_blank">
+                        Preview
+                    </Btn>
                 ) : (
                     <span />
                 )}
                 {link ? (
-                    <button type="button" disabled={busy} onClick={() => void revoke()} style={{ ...pill, height: 34, color: C.amber, borderColor: "transparent" }}>
+                    <Btn variant="danger" size="sm" icon="close" busy={busy} onClick={() => void revoke()} style={{ borderColor: "transparent" }}>
                         Turn off link
-                    </button>
+                    </Btn>
                 ) : null}
             </div>
         </motion.div>
@@ -957,13 +958,13 @@ function PlaylistViewInner(props: PlaylistViewProps) {
                 <p style={{ color: C.subtle, margin: "0 0 24px" }}>{error.status === 401 ? "Your playlists live with your Spotify sign-in." : error.message}</p>
                 <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
                     {error.status === 401 && session.config?.spotify_enabled ? (
-                        <button type="button" onClick={() => signIn()} style={{ ...pill, background: C.text, color: C.ink, border: "none", height: 46, padding: "0 22px", fontWeight: 500 }}>
+                        <Btn variant="spotify" size="lg" icon="spotify" onClick={() => signIn()}>
                             Continue with Spotify
-                        </button>
+                        </Btn>
                     ) : null}
-                    <a href={createPath} style={{ ...pill, height: 46, padding: "0 22px", textDecoration: "none" }}>
+                    <Btn variant="ghost" size="lg" icon="plus" href={createPath}>
                         Make a new one
-                    </a>
+                    </Btn>
                 </div>
             </div>
         )
@@ -1008,20 +1009,22 @@ function PlaylistViewInner(props: PlaylistViewProps) {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.9, ease: EASE }}
-                style={{ position: "relative", zIndex: 5, display: "flex", flexDirection: narrow ? "column" : "row", gap: narrow ? 28 : 48, alignItems: narrow ? "stretch" : "flex-end" }}
+                style={{ position: "relative", zIndex: 2, display: "flex", flexDirection: narrow ? "column" : "row", gap: narrow ? 28 : 48, alignItems: narrow ? "stretch" : "flex-end" }}
             >
                 <div style={{ width: narrow ? "100%" : 320, boxShadow: "0 40px 90px -30px rgba(0,0,0,0.9)", borderRadius: 24 }}>
                     <div style={{ position: "relative" }} className="mw-cover">
                         <Collage images={covers} size="100%" radius={24} />
                         {editable ? (
-                            <button
-                                type="button"
+                            <Btn
+                                variant="ghost"
+                                size="sm"
+                                icon="pencil"
                                 onClick={() => setEditingCover(true)}
                                 className="mw-cover-edit"
-                                style={{ ...pill, position: "absolute", right: 12, bottom: 12, height: 36, background: "rgba(11,10,13,0.72)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", color: C.text, border: `1px solid ${C.line2}` }}
+                                style={{ position: "absolute", right: 12, bottom: 12, background: "rgba(11,10,13,0.72)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", color: C.text }}
                             >
-                                ✎ Edit cover
-                            </button>
+                                Edit cover
+                            </Btn>
                         ) : null}
                         <style>{`.mw-cover .mw-cover-edit{opacity:${narrow ? 1 : 0};transition:opacity .25s ease}.mw-cover:hover .mw-cover-edit,.mw-cover .mw-cover-edit:focus-visible{opacity:1}`}</style>
                     </div>
@@ -1085,85 +1088,60 @@ function PlaylistViewInner(props: PlaylistViewProps) {
 
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 22 }}>
                         {queue.length ? (
-                            <button
-                                type="button"
+                            <Btn
+                                variant="accent"
+                                accent={accent}
+                                icon={playingHere && player.playing ? "pause" : "play"}
                                 onClick={() => (playingHere ? requestPlay(player.id ?? "", player.label, queue) : playQueue(queue))}
-                                style={{ ...pill, background: accent, color: C.ink, border: "none", fontWeight: 500, height: 42, padding: "0 18px" }}
                             >
-                                {playingHere && player.playing ? "❚❚ Pause" : playingHere ? "▶ Resume" : "▶ Play all"}
-                            </button>
+                                {playingHere && player.playing ? "Pause" : playingHere ? "Resume" : "Play all"}
+                            </Btn>
                         ) : null}
                         {isGuest && session.config?.spotify_enabled ? (
-                            <button
-                                type="button"
-                                onClick={() => signIn()}
-                                title="Sign in with Spotify to save. Your guest playlists move to your account."
-                                style={{ ...pill, background: C.text, color: C.ink, border: "none", fontWeight: 500, height: 42, padding: "0 18px" }}
-                            >
-                                <span style={{ width: 8, height: 8, borderRadius: 8, background: "#1ed760" }} /> Connect Spotify to save
-                            </button>
+                            <Btn variant="spotify" icon="spotify" onClick={() => signIn()} title="Sign in with Spotify to save. Your guest playlists move to your account.">
+                                Connect Spotify to save
+                            </Btn>
                         ) : null}
                         {canSave ? (
                             playlist.spotify_url ? (
                                 <>
-                                    <a href={playlist.spotify_url} target="_blank" rel="noreferrer" style={{ ...pill, background: C.text, color: C.ink, border: "none", textDecoration: "none", fontWeight: 500, height: 42, padding: "0 18px" }}>
-                                        <span style={{ width: 8, height: 8, borderRadius: 8, background: "#1ed760" }} /> Open in Spotify
-                                    </a>
+                                    <Btn variant="spotify" icon="spotify" iconRight="external" href={playlist.spotify_url} target="_blank">
+                                        Open in Spotify
+                                    </Btn>
                                     <AnimatePresence>
                                         {playlist.needs_sync || busy === "sync" ? (
-                                            <motion.button
-                                                key="sync"
-                                                type="button"
-                                                onClick={sync}
-                                                disabled={Boolean(busy)}
-                                                initial={{ opacity: 0, scale: 0.9 }}
-                                                animate={{ opacity: 1, scale: 1 }}
-                                                exit={{ opacity: 0, scale: 0.9 }}
-                                                title="You've changed this playlist since saving it"
-                                                style={{ ...pill, height: 42, padding: "0 16px", color: C.text, borderColor: `color-mix(in srgb, ${accent} 55%, transparent)` }}
-                                            >
-                                                <span style={{ width: 6, height: 6, borderRadius: 6, background: accent }} /> {busy === "sync" ? "Updating…" : "Update on Spotify"}
-                                            </motion.button>
+                                            <motion.span key="sync" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} style={{ display: "inline-flex" }}>
+                                                <Btn variant="light" icon="refresh" busy={busy === "sync"} disabled={Boolean(busy) && busy !== "sync"} onClick={sync} title="You've changed this playlist since saving it">
+                                                    {busy === "sync" ? "Updating…" : "Update on Spotify"}
+                                                </Btn>
+                                            </motion.span>
                                         ) : null}
                                     </AnimatePresence>
                                 </>
                             ) : (
-                                <button type="button" onClick={save} disabled={Boolean(busy)} style={{ ...pill, background: C.text, color: C.ink, border: "none", fontWeight: 500, height: 42, padding: "0 18px", opacity: busy && busy !== "save" ? 0.5 : 1 }}>
-                                    <span style={{ width: 8, height: 8, borderRadius: 8, background: "#1ed760" }} /> {busy === "save" ? "Saving…" : "Save to Spotify"}
-                                </button>
+                                <Btn variant="spotify" icon="spotify" busy={busy === "save"} disabled={Boolean(busy) && busy !== "save"} onClick={save}>
+                                    {busy === "save" ? "Saving…" : "Save to Spotify"}
+                                </Btn>
                             )
                         ) : null}
                         <span style={{ position: "relative" }}>
-                            <button
-                                type="button"
+                            <Btn
+                                variant="ghost"
+                                icon="share"
                                 aria-expanded={sharing}
                                 onClick={() => setSharing((s) => !s)}
-                                style={{ ...pill, height: 42, color: playlist.share_slug ? C.text : C.muted, borderColor: playlist.share_slug ? `color-mix(in srgb, ${accent} 45%, transparent)` : C.line2 }}
+                                style={playlist.share_slug ? { color: C.text, borderColor: `color-mix(in srgb, ${accent} 45%, transparent)` } : undefined}
                             >
-                                {playlist.share_slug ? <span style={{ width: 6, height: 6, borderRadius: 6, background: accent }} /> : null}
-                                Share
-                            </button>
+                                {playlist.share_slug ? "Shared" : "Share"}
+                            </Btn>
                             <AnimatePresence>{sharing ? <SharePanel key="share" playlist={playlist} accent={accent} onClose={() => setSharing(false)} onChange={setPlaylist} /> : null}</AnimatePresence>
                         </span>
-                        <a href={createPath} style={{ ...pill, height: 42, textDecoration: "none" }}>
+                        <Btn variant="ghost" icon="plus" href={createPath}>
                             New playlist
-                        </a>
-                        <button
-                            type="button"
-                            onClick={remove}
-                            disabled={Boolean(busy)}
-                            onMouseEnter={(e) => {
-                                e.currentTarget.style.color = C.amber
-                                e.currentTarget.style.borderColor = `color-mix(in srgb, ${C.amber} 45%, transparent)`
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.color = C.muted
-                                e.currentTarget.style.borderColor = C.line2
-                            }}
-                            style={{ ...pill, height: 42, color: C.muted, transition: "color 0.2s ease, border-color 0.2s ease" }}
-                        >
+                        </Btn>
+                        <Btn variant="danger" icon="trash" busy={busy === "delete"} disabled={Boolean(busy) && busy !== "delete"} onClick={remove}>
                             {busy === "delete" ? "Deleting…" : "Delete"}
-                        </button>
+                        </Btn>
                     </div>
                 </div>
             </motion.section>
@@ -1175,9 +1153,17 @@ function PlaylistViewInner(props: PlaylistViewProps) {
                         <div style={eyebrow}>Make it more…</div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
                             {REFINEMENTS.map((r) => (
-                                <button key={r} type="button" disabled={Boolean(busy)} onClick={() => void refine(r)} style={{ ...pill, borderColor: busy === r ? accent : C.line2, color: busy === r ? accent : C.muted, opacity: busy && busy !== r ? 0.45 : 1 }}>
+                                <Btn
+                                    key={r}
+                                    variant="ghost"
+                                    size="sm"
+                                    busy={busy === r}
+                                    disabled={Boolean(busy) && busy !== r}
+                                    onClick={() => void refine(r)}
+                                    style={busy === r ? { borderColor: accent, color: accent } : undefined}
+                                >
                                     {busy === r ? "Reworking…" : r}
-                                </button>
+                                </Btn>
                             ))}
                         </div>
                     </div>
@@ -1201,9 +1187,16 @@ function PlaylistViewInner(props: PlaylistViewProps) {
                         aria-label="Describe a change"
                         style={{ flex: 1, minWidth: 0, height: 42, borderRadius: 100, border: `1px solid ${C.line2}`, background: C.ink, color: C.text, padding: "0 16px", fontFamily: SANS, fontSize: 14, outline: "none" }}
                     />
-                    <button type="submit" disabled={Boolean(busy) || custom.trim().length < 2} style={{ ...pill, height: 42, background: custom.trim().length >= 2 ? accent : "transparent", color: custom.trim().length >= 2 ? C.ink : C.faint, border: "none" }}>
+                    <Btn
+                        type="submit"
+                        variant={custom.trim().length >= 2 ? "accent" : "quiet"}
+                        accent={accent}
+                        icon="sparkle"
+                        busy={Boolean(custom) && busy === custom}
+                        disabled={Boolean(busy) || custom.trim().length < 2}
+                    >
                         {busy === custom && custom ? "Working…" : "Refine"}
-                    </button>
+                    </Btn>
                 </form>
             </section>
 
@@ -1297,18 +1290,16 @@ function PlaylistViewInner(props: PlaylistViewProps) {
                                 </div>
                                 {canSave ? (
                                     playlist.spotify_url ? (
-                                        <a href={playlist.spotify_url} target="_blank" rel="noreferrer" style={{ ...pill, height: 38, background: C.text, color: C.ink, border: "none", textDecoration: "none", fontWeight: 500 }}>
+                                        <Btn variant="spotify" size="sm" icon="spotify" iconRight="external" href={playlist.spotify_url} target="_blank">
                                             Open in Spotify
-                                        </a>
+                                        </Btn>
                                     ) : (
-                                        <button type="button" onClick={save} disabled={Boolean(busy)} style={{ ...pill, height: 38, background: C.text, color: C.ink, border: "none", fontWeight: 500 }}>
+                                        <Btn variant="spotify" size="sm" icon="spotify" busy={busy === "save"} disabled={Boolean(busy) && busy !== "save"} onClick={save}>
                                             {busy === "save" ? "Saving…" : "Save to Spotify"}
-                                        </button>
+                                        </Btn>
                                     )
                                 ) : null}
-                                <button type="button" aria-label="Back to top" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} style={{ ...pill, height: 38, width: 38, padding: 0, justifyContent: "center" }}>
-                                    ↑
-                                </button>
+                                <Btn variant="ghost" size="sm" icon="arrow-up" aria-label="Back to top" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} style={{ width: 34, padding: 0 }} />
                             </div>
                         </motion.div>
                     ) : null}
@@ -1350,9 +1341,9 @@ function PlaylistViewInner(props: PlaylistViewProps) {
                             <span style={{ pointerEvents: "auto", display: "inline-flex", alignItems: "center", gap: 14, padding: toast.action ? "8px 8px 8px 18px" : "12px 18px", borderRadius: 100, background: C.surface3, border: `1px solid ${C.line2}`, color: C.text, fontFamily: SANS, fontSize: 14, boxShadow: "0 20px 50px -20px rgba(0,0,0,0.9)", maxWidth: "100%" }}>
                                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{toast.message}</span>
                                 {toast.action ? (
-                                    <button type="button" onClick={toast.action.run} style={{ ...pill, height: 32, background: accent, color: C.ink, border: "none", fontWeight: 500 }}>
+                                    <Btn variant="accent" accent={accent} size="sm" icon={/swap/i.test(toast.action.label) ? "refresh" : "undo"} onClick={toast.action.run} style={{ height: 32 }}>
                                         {toast.action.label}
-                                    </button>
+                                    </Btn>
                                 ) : null}
                             </span>
                         </motion.div>

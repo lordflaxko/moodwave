@@ -22,6 +22,7 @@ import {
     type QueueItem,
     type Track,
     Safe,
+    Btn,
 } from "./MoodwaveAPI.tsx"
 
 /**
@@ -50,7 +51,6 @@ interface Shared {
 }
 
 const eyebrow: CSSProperties = { fontFamily: MONO, fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: C.subtle }
-const pill: CSSProperties = { height: 44, borderRadius: 100, padding: "0 20px", border: `1px solid ${C.line2}`, background: "transparent", color: C.muted, fontFamily: SANS, fontSize: 14, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8, textDecoration: "none", whiteSpace: "nowrap" }
 
 const spotifyId = (t: Track) => t.uri.split(":").pop() ?? t.id
 const isSpotify = (t: Track) => t.uri.startsWith("spotify:track:")
@@ -117,9 +117,9 @@ function SharedPlaylistInner(props: SharedPlaylistProps) {
                 <div style={eyebrow}>Shared playlist</div>
                 <h2 style={{ fontFamily: SERIF, fontWeight: 300, fontSize: 40, letterSpacing: "-0.02em", margin: "14px 0 10px" }}>Nothing to play here</h2>
                 <p style={{ color: C.subtle, margin: "0 0 24px" }}>{error}</p>
-                <a href={createPath} style={{ ...pill, background: accent, color: C.ink, border: "none", fontWeight: 500 }}>
-                    Make your own playlist →
-                </a>
+                <Btn variant="accent" accent={accent} size="lg" iconRight="arrow-right" href={createPath}>
+                    Make your own playlist
+                </Btn>
             </div>
         )
     }
@@ -162,17 +162,18 @@ function SharedPlaylistInner(props: SharedPlaylistProps) {
                     </div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 22 }}>
                         {queue.length ? (
-                            <button
-                                type="button"
+                            <Btn
+                                variant="accent"
+                                accent={accent}
+                                icon={playingHere && player.playing ? "pause" : "play"}
                                 onClick={() => (playingHere ? requestPlay(player.id ?? "", player.label, queue) : playQueue(queue))}
-                                style={{ ...pill, background: accent, color: C.ink, border: "none", fontWeight: 500 }}
                             >
-                                {playingHere && player.playing ? "❚❚ Pause" : playingHere ? "▶ Resume" : "▶ Play all"}
-                            </button>
+                                {playingHere && player.playing ? "Pause" : playingHere ? "Resume" : "Play all"}
+                            </Btn>
                         ) : null}
-                        <a href={makeOwn} style={{ ...pill, background: C.text, color: C.ink, border: "none", fontWeight: 500 }}>
-                            Make your own →
-                        </a>
+                        <Btn variant="light" icon="sparkle" iconRight="arrow-right" href={makeOwn}>
+                            Make your own
+                        </Btn>
                     </div>
                 </div>
             </motion.section>
@@ -222,9 +223,9 @@ function SharedPlaylistInner(props: SharedPlaylistProps) {
                     <div style={eyebrow}>Moodwave</div>
                     <p style={{ fontFamily: SERIF, fontWeight: 300, fontSize: 26, lineHeight: 1.25, margin: "10px 0 0", maxWidth: 520 }}>Describe a moment, get a playlist of real songs — then save it to Spotify.</p>
                 </div>
-                <a href={makeOwn} style={{ ...pill, background: accent, color: C.ink, border: "none", fontWeight: 500 }}>
-                    Start from this mood →
-                </a>
+                <Btn variant="accent" accent={accent} size="lg" iconRight="arrow-right" href={makeOwn}>
+                    Start from this mood
+                </Btn>
             </section>
 
             <PlayerDock accent={accent} />

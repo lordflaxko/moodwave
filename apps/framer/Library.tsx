@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 
-import { api, C, Collage, duration, EASE, MONO, relativeTime, SANS, SERIF, signIn, useFinePointer, useSession, type Playlist, type PlaylistSummary, Safe } from "./MoodwaveAPI.tsx"
+import { api, C, Collage, duration, EASE, MONO, relativeTime, SANS, SERIF, signIn, useFinePointer, useSession, type Playlist, type PlaylistSummary, Safe, Btn } from "./MoodwaveAPI.tsx"
 
 /**
  * Moodwave library (`/library`): every playlist you've made. Search (titles, prompts,
@@ -96,7 +96,6 @@ function CardMenu({ onRename, onDuplicate, onDelete, busy }: { onRename: () => v
             window.removeEventListener("keydown", key)
         }
     }, [open])
-    const item: CSSProperties = { all: "unset", display: "block", width: "100%", boxSizing: "border-box", padding: "9px 14px", borderRadius: 10, fontFamily: SANS, fontSize: 14, color: C.text, cursor: "pointer" }
     const pick = (fn: () => void) => () => {
         setOpen(false)
         fn()
@@ -124,15 +123,15 @@ function CardMenu({ onRename, onDuplicate, onDelete, busy }: { onRename: () => v
                         transition={{ duration: 0.18 }}
                         style={{ position: "absolute", top: 40, right: 0, minWidth: 160, padding: 6, borderRadius: 14, background: C.surface3, border: `1px solid ${C.line2}`, boxShadow: "0 20px 50px -20px rgba(0,0,0,0.95)" }}
                     >
-                        <button type="button" role="menuitem" style={item} onClick={pick(onRename)}>
+                        <Btn variant="quiet" size="sm" role="menuitem" icon="pencil" onClick={pick(onRename)} style={{ width: "100%", justifyContent: "flex-start", borderRadius: 10, height: 38, padding: "0 12px" }}>
                             Rename
-                        </button>
-                        <button type="button" role="menuitem" style={item} onClick={pick(onDuplicate)}>
+                        </Btn>
+                        <Btn variant="quiet" size="sm" role="menuitem" icon="copy" onClick={pick(onDuplicate)} style={{ width: "100%", justifyContent: "flex-start", borderRadius: 10, height: 38, padding: "0 12px" }}>
                             Duplicate
-                        </button>
-                        <button type="button" role="menuitem" style={{ ...item, color: C.amber }} onClick={pick(onDelete)}>
+                        </Btn>
+                        <Btn variant="danger" size="sm" role="menuitem" icon="trash" onClick={pick(onDelete)} style={{ width: "100%", justifyContent: "flex-start", borderRadius: 10, height: 38, padding: "0 12px", borderColor: "transparent" }}>
                             Delete
-                        </button>
+                        </Btn>
                     </motion.div>
                 ) : null}
             </AnimatePresence>
@@ -249,13 +248,13 @@ function LibraryInner(props: LibraryProps) {
             <div style={root}>
                 <Empty title="Your library lives with your sign-in" body="Connect Spotify to see every playlist you’ve made here.">
                     {session.config?.spotify_enabled ? (
-                        <button type="button" onClick={() => signIn()} style={button(true)}>
-                            <span style={{ width: 8, height: 8, borderRadius: 8, background: "#1ed760" }} /> Continue with Spotify
-                        </button>
+                        <Btn variant="spotify" size="lg" icon="spotify" onClick={() => signIn()}>
+                            Continue with Spotify
+                        </Btn>
                     ) : null}
-                    <a href={createPath} style={button(false)}>
+                    <Btn variant="ghost" size="lg" icon="plus" href={createPath}>
                         Make a playlist
-                    </a>
+                    </Btn>
                 </Empty>
             </div>
         )
@@ -265,9 +264,9 @@ function LibraryInner(props: LibraryProps) {
         return (
             <div style={root}>
                 <Empty title="Couldn’t load your library" body={error}>
-                    <button type="button" onClick={() => window.location.reload()} style={button(true)}>
+                    <Btn variant="accent" accent={accent} size="lg" icon="refresh" onClick={() => window.location.reload()}>
                         Try again
-                    </button>
+                    </Btn>
                 </Empty>
             </div>
         )
@@ -277,9 +276,9 @@ function LibraryInner(props: LibraryProps) {
         return (
             <div style={root}>
                 <Empty title="Nothing here yet" body="Describe a moment and your first playlist will land here.">
-                    <a href={createPath} style={{ ...button(true), background: accent }}>
-                        Start a playlist →
-                    </a>
+                    <Btn variant="accent" accent={accent} size="lg" iconRight="arrow-right" href={createPath}>
+                        Start a playlist
+                    </Btn>
                 </Empty>
             </div>
         )

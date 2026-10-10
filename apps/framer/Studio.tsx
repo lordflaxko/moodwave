@@ -23,6 +23,7 @@ import {
     type GenerateInput,
     type Playlist,
     Safe,
+    Btn,
 } from "./MoodwaveAPI.tsx"
 
 /** Accent at an opacity; works for hex, rgb() or hsl() values from the colour control. */
@@ -316,35 +317,6 @@ const card: CSSProperties = {
     fontFamily: SANS,
 }
 
-const primaryButton = (accent: string): CSSProperties => ({
-    height: 48,
-    border: "none",
-    borderRadius: 100,
-    padding: "0 24px",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    fontFamily: SANS,
-    fontSize: 15,
-    fontWeight: 500,
-    cursor: "pointer",
-    background: accent,
-    color: C.ink,
-})
-
-const ghostButton: CSSProperties = {
-    height: 44,
-    borderRadius: 100,
-    padding: "0 20px",
-    border: `1px solid ${C.line2}`,
-    background: "transparent",
-    color: C.muted,
-    fontFamily: SANS,
-    fontSize: 14,
-    cursor: "pointer",
-}
-
 function StudioInner(props: StudioProps) {
     const { playlistPath = "/playlist", accent = C.lilac } = props
     const isStatic = useIsStaticRenderer()
@@ -428,13 +400,16 @@ function StudioInner(props: StudioProps) {
                         </p>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
                             {spotifyEnabled ? (
-                                <button type="button" onClick={() => signIn()} style={{ ...primaryButton(C.text), width: "100%" }}>
-                                    <span style={{ width: 8, height: 8, borderRadius: 8, background: "#1ed760" }} /> Continue with Spotify
-                                </button>
+                                <Btn variant="spotify" size="lg" icon="spotify" onClick={() => signIn()} style={{ width: "100%" }}>
+                                    Continue with Spotify
+                                </Btn>
                             ) : null}
                             {guestAllowed ? (
-                                <button
-                                    type="button"
+                                <Btn
+                                    variant="ghost"
+                                    size="lg"
+                                    icon="user"
+                                    iconRight="arrow-right"
                                     onClick={async () => {
                                         try {
                                             await startGuest()
@@ -444,10 +419,10 @@ function StudioInner(props: StudioProps) {
                                             setPhase({ kind: "error", message: (e as Error).message, input: phase.input })
                                         }
                                     }}
-                                    style={{ ...ghostButton, width: "100%", color: C.text }}
+                                    style={{ width: "100%", color: C.text }}
                                 >
                                     Try it as a guest
-                                </button>
+                                </Btn>
                             ) : null}
                             {guestAllowed ? (
                                 <p style={{ fontSize: 12.5, color: C.subtle, margin: "2px 0 0", lineHeight: 1.5 }}>
@@ -455,8 +430,8 @@ function StudioInner(props: StudioProps) {
                                 </p>
                             ) : null}
                             {demoAllowed ? (
-                                <button
-                                    type="button"
+                                <Btn
+                                    variant="quiet"
                                     onClick={async () => {
                                         try {
                                             await startDemo()
@@ -466,10 +441,10 @@ function StudioInner(props: StudioProps) {
                                             setPhase({ kind: "error", message: (e as Error).message, input: phase.input })
                                         }
                                     }}
-                                    style={{ ...ghostButton, width: "100%" }}
+                                    style={{ width: "100%" }}
                                 >
                                     Try the demo instead
-                                </button>
+                                </Btn>
                             ) : null}
                         </div>
                     </motion.div>
@@ -477,9 +452,9 @@ function StudioInner(props: StudioProps) {
                     <motion.div key="error" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.6, ease: EASE }} style={card}>
                         <div style={{ fontFamily: MONO, fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: C.amber }}>That didn’t work</div>
                         <p style={{ fontSize: 15, lineHeight: 1.55, color: C.muted, margin: "12px 0 20px" }}>{phase.message}</p>
-                        <button type="button" onClick={() => void run(phase.input)} style={primaryButton(accent)}>
+                        <Btn variant="accent" accent={accent} size="lg" icon="refresh" onClick={() => void run(phase.input)}>
                             Try again
-                        </button>
+                        </Btn>
                     </motion.div>
                 ) : null}
             </AnimatePresence>

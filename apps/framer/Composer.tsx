@@ -513,7 +513,8 @@ function ComposerInner(props: ComposerProps) {
                     <motion.button
                         type="submit"
                         disabled={!ready}
-                        whileTap={{ scale: 0.92 }}
+                        whileHover={ready ? { y: -1, boxShadow: `0 16px 44px -10px ${accent}` } : undefined}
+                        whileTap={{ scale: 0.94 }}
                         style={{
                             height: 44,
                             border: "none",

@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, MotionGlobalConfig } from "framer-motion"
-import { Component, useEffect, useRef, useState, type ReactNode } from "react"
+import { Component, useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 
 /**
@@ -871,6 +871,264 @@ export function closePlayer() {
     spotifyController?.destroy?.()
     spotifyController = null
     setPlayer({ id: null, label: "", playing: false, queue: [], index: -1 })
+}
+
+// --- Buttons and icons ---------------------------------------------------------------------
+// One button system for every code component: variants by role, an icon that reacts on hover,
+// a lift on hover and a squash on press. Reduced motion is handled globally (installA11y).
+
+export type IconName =
+    | "play"
+    | "pause"
+    | "spotify"
+    | "share"
+    | "plus"
+    | "trash"
+    | "pencil"
+    | "image"
+    | "refresh"
+    | "copy"
+    | "check"
+    | "external"
+    | "arrow-right"
+    | "arrow-up"
+    | "sparkle"
+    | "link"
+    | "sign-out"
+    | "close"
+    | "user"
+    | "undo"
+
+// Stroke icons (Lucide-style, 24px grid). Multiple subpaths share one `d`.
+const STROKE_ICONS: Partial<Record<IconName, string>> = {
+    share: "M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8 M16 6l-4-4-4 4 M12 2v13",
+    plus: "M12 5v14 M5 12h14",
+    trash: "M3 6h18 M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6 M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2 M10 11v6 M14 11v6",
+    pencil: "M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z",
+    image: "M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z M9 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z M21 15l-3.1-3.1a2 2 0 0 0-2.8 0L6 21",
+    refresh: "M21 12a9 9 0 1 1-2.64-6.36L21 8 M21 3v5h-5",
+    copy: "M11 9h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1",
+    check: "M20 6 9 17l-5-5",
+    external: "M7 17 17 7 M7 7h10v10",
+    "arrow-right": "M5 12h14 M13 5l7 7-7 7",
+    "arrow-up": "M12 19V5 M5 12l7-7 7 7",
+    sparkle: "M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2Z",
+    link: "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71 M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71",
+    "sign-out": "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4 M16 17l5-5-5-5 M21 12H9",
+    close: "M18 6 6 18 M6 6l12 12",
+    undo: "M3 7v6h6 M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13",
+    user: "M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2 M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z",
+}
+
+// The Spotify icon mark, unmodified (drawn in currentColor: black on Spotify green).
+const SPOTIFY_MARK =
+    "M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"
+
+export function Icon({ name, size = 16, style }: { name: IconName; size?: number; style?: CSSProperties }) {
+    const common = { width: size, height: size, viewBox: "0 0 24 24", "aria-hidden": true, focusable: false, style: { display: "block", flexShrink: 0, ...style } } as const
+    if (name === "spotify")
+        return (
+            <svg {...common} fill="currentColor">
+                <path d={SPOTIFY_MARK} />
+            </svg>
+        )
+    if (name === "play")
+        return (
+            <svg {...common} fill="currentColor">
+                <path d="M7 4.5v15a1 1 0 0 0 1.53.85l12-7.5a1 1 0 0 0 0-1.7l-12-7.5A1 1 0 0 0 7 4.5Z" />
+            </svg>
+        )
+    if (name === "pause")
+        return (
+            <svg {...common} fill="currentColor">
+                <rect x="5.5" y="4" width="4.5" height="16" rx="1.2" />
+                <rect x="14" y="4" width="4.5" height="16" rx="1.2" />
+            </svg>
+        )
+    return (
+        <svg {...common} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d={STROKE_ICONS[name] ?? ""} />
+        </svg>
+    )
+}
+
+// How each icon answers a hover / press on its button.
+const ICON_MOTION: Partial<Record<IconName, { hover: Record<string, number>; tap?: Record<string, number> }>> = {
+    "arrow-right": { hover: { x: 3 } },
+    "arrow-up": { hover: { y: -2 } },
+    external: { hover: { x: 2, y: -2 } },
+    play: { hover: { scale: 1.2 }, tap: { scale: 0.9 } },
+    pause: { hover: { scale: 1.12 } },
+    refresh: { hover: { rotate: 180 } },
+    spotify: { hover: { scale: 1.16, rotate: -10 } },
+    plus: { hover: { rotate: 90 } },
+    trash: { hover: { rotate: -10, y: -1 } },
+    sparkle: { hover: { rotate: 25, scale: 1.18 } },
+    share: { hover: { y: -2 } },
+    copy: { hover: { scale: 1.12 } },
+    check: { hover: { scale: 1.15 } },
+    pencil: { hover: { rotate: -12 } },
+    image: { hover: { scale: 1.12 } },
+    "sign-out": { hover: { x: 2 } },
+    undo: { hover: { rotate: -35 } },
+}
+
+export type BtnVariant = "accent" | "spotify" | "light" | "ghost" | "danger" | "quiet"
+const SPOTIFY_GREEN = "#1ED760"
+const BTN_SIZES = {
+    sm: { height: 34, padding: "0 14px", fontSize: 13, gap: 7, icon: 15 },
+    md: { height: 42, padding: "0 18px", fontSize: 14, gap: 8, icon: 16 },
+    lg: { height: 48, padding: "0 22px", fontSize: 15, gap: 9, icon: 17 },
+}
+
+function variantLook(variant: BtnVariant, accent: string): { base: CSSProperties; hover: Record<string, string> } {
+    switch (variant) {
+        case "accent":
+            return {
+                base: { background: accent, color: C.ink, border: "1px solid transparent", fontWeight: 500 },
+                hover: { boxShadow: `0 12px 32px -12px color-mix(in srgb, ${accent} 80%, transparent)` },
+            }
+        case "spotify":
+            return {
+                base: { background: SPOTIFY_GREEN, color: "#000", border: "1px solid transparent", fontWeight: 600 },
+                hover: { backgroundColor: "#3BE477", boxShadow: "0 12px 32px -12px rgba(30, 215, 96, 0.75)" },
+            }
+        case "light":
+            return {
+                base: { background: C.text, color: C.ink, border: "1px solid transparent", fontWeight: 500 },
+                hover: { backgroundColor: "#ffffff", boxShadow: "0 12px 30px -14px rgba(242, 239, 233, 0.5)" },
+            }
+        case "danger":
+            return {
+                base: { background: "rgba(0,0,0,0)", color: C.muted, border: `1px solid ${C.line2}` },
+                hover: { color: C.amber, borderColor: "rgba(232, 184, 107, 0.5)", backgroundColor: "rgba(232, 184, 107, 0.08)" },
+            }
+        case "quiet":
+            return {
+                base: { background: "rgba(0,0,0,0)", color: C.muted, border: "1px solid transparent" },
+                hover: { color: C.text, backgroundColor: C.surface2 },
+            }
+        default:
+            return {
+                base: { background: "rgba(0,0,0,0)", color: C.muted, border: `1px solid ${C.line2}` },
+                hover: { color: C.text, borderColor: "rgba(242, 239, 233, 0.28)", backgroundColor: C.surface2 },
+            }
+    }
+}
+
+export interface BtnProps {
+    variant?: BtnVariant
+    size?: "sm" | "md" | "lg"
+    icon?: IconName
+    iconRight?: IconName
+    busy?: boolean
+    disabled?: boolean
+    href?: string
+    target?: string
+    rel?: string
+    type?: "button" | "submit"
+    onClick?: (e: ReactMouseEvent<HTMLElement>) => void
+    accent?: string
+    title?: string
+    id?: string
+    role?: string
+    tabIndex?: number
+    className?: string
+    "aria-label"?: string
+    "aria-expanded"?: boolean
+    "aria-pressed"?: boolean
+    "aria-haspopup"?: "menu" | "dialog" | boolean
+    style?: CSSProperties
+    children?: ReactNode
+}
+
+function Spinner({ size }: { size: number }) {
+    return (
+        <motion.span
+            aria-hidden
+            animate={{ rotate: 360 }}
+            transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+            style={{ width: size - 2, height: size - 2, borderRadius: "50%", border: "2px solid currentColor", borderRightColor: "transparent", display: "inline-block", flexShrink: 0 }}
+        />
+    )
+}
+
+/** The site's button: `variant` says what it does, `icon` shows it, and it answers the pointer. */
+export function Btn(props: BtnProps) {
+    const { variant = "ghost", size = "md", icon, iconRight, busy, disabled, href, target, rel, type = "button", onClick, accent = C.lilac, style, children, ...aria } = props
+    const dims = BTN_SIZES[size]
+    const look = variantLook(variant, accent)
+    const inactive = Boolean(disabled || busy)
+    const shine = variant === "accent" || variant === "spotify"
+    const iconFor = (name: IconName | undefined, key: string) =>
+        name ? (
+            <motion.span key={key} variants={{ rest: { x: 0, y: 0, scale: 1, rotate: 0 }, hover: ICON_MOTION[name]?.hover ?? { scale: 1.08 }, tap: ICON_MOTION[name]?.tap ?? {} }} transition={{ type: "spring", stiffness: 420, damping: 18 }} style={{ display: "inline-flex" }}>
+                <Icon name={name} size={dims.icon} />
+            </motion.span>
+        ) : null
+    const shared = {
+        initial: "rest",
+        animate: "rest",
+        whileHover: inactive ? undefined : "hover",
+        whileTap: inactive ? undefined : "tap",
+        variants: {
+            rest: { y: 0, scale: 1 },
+            hover: { y: -1, scale: 1, ...look.hover },
+            tap: { y: 0, scale: 0.96 },
+        },
+        transition: { type: "spring" as const, stiffness: 500, damping: 30 },
+        "aria-busy": busy || undefined,
+        "aria-disabled": inactive || undefined,
+        ...aria,
+        style: {
+            position: "relative",
+            overflow: "hidden",
+            height: dims.height,
+            padding: dims.padding,
+            borderRadius: 100,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: dims.gap,
+            fontFamily: SANS,
+            fontSize: dims.fontSize,
+            lineHeight: 1,
+            whiteSpace: "nowrap",
+            textDecoration: "none",
+            cursor: inactive ? "default" : "pointer",
+            opacity: disabled && !busy ? 0.45 : 1,
+            boxSizing: "border-box",
+            ...look.base,
+            ...style,
+        } as CSSProperties,
+    }
+    const content = (
+        <>
+            {shine ? (
+                <motion.span
+                    aria-hidden
+                    variants={{ rest: { x: "-130%" }, hover: { x: "130%" }, tap: { x: "130%" } }}
+                    transition={{ duration: 0.75, ease: [0.22, 1, 0.36, 1] }}
+                    style={{ position: "absolute", inset: 0, background: "linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.38) 50%, transparent 70%)", pointerEvents: "none" }}
+                />
+            ) : null}
+            {busy ? <Spinner size={dims.icon} /> : iconFor(icon, "icon")}
+            {children != null ? <span style={{ position: "relative" }}>{children}</span> : null}
+            {busy ? null : iconFor(iconRight, "iconRight")}
+        </>
+    )
+    if (href && !inactive) {
+        return (
+            <motion.a href={href} target={target} rel={rel ?? (target === "_blank" ? "noreferrer" : undefined)} onClick={onClick} {...shared}>
+                {content}
+            </motion.a>
+        )
+    }
+    return (
+        <motion.button type={type} disabled={inactive} onClick={onClick} {...shared}>
+            {content}
+        </motion.button>
+    )
 }
 
 function DockButton({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: ReactNode }) {
