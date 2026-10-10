@@ -195,6 +195,7 @@ class UserOut(BaseModel):
     display_name: str
     avatar_url: str | None
     is_demo: bool
+    is_guest: bool = False
 
 
 class SessionOut(BaseModel):
@@ -206,6 +207,8 @@ class SessionOut(BaseModel):
 
 class ExchangeRequest(BaseModel):
     code: str = Field(min_length=10, max_length=500)
+    # The guest session in this browser, if any: its playlists move to the signed-in account.
+    guest_token: str | None = Field(default=None, max_length=1000)
 
 
 class AppConfigOut(BaseModel):
@@ -213,6 +216,9 @@ class AppConfigOut(BaseModel):
     demo_allowed: bool
     spotify_enabled: bool
     ai_enabled: bool
+    guest_allowed: bool = False
+    guest_playlists_per_day: int = 0
+    guest_max_tracks: int = 0
 
 
 class FeaturedArtist(BaseModel):

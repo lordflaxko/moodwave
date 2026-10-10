@@ -22,6 +22,8 @@ class User(SQLModel, table=True):
     email: str | None = None
     avatar_url: str | None = None
     is_demo: bool = False
+    # Tried Moodwave without Spotify: catalog via the app token, limits apply, can't save.
+    is_guest: bool = False
     created_at: datetime = Field(default_factory=_now)
 
 

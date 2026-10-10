@@ -201,6 +201,8 @@ class PlaylistPipeline:
         self.avoid_artists: list[str] = []
         self.progress: Progress | None = None
         self.notes: tuple[str, ...] = ()
+        # Set for guests past the shared AI budget (explains the offline-curator result).
+        self.guest_notice: str | None = None
 
     def use_preferences(self, avoid_ids: set[str], avoid_artists: set[str], notes: list[str]) -> None:
         """Steer picks with the listener's thumbs: drop disliked songs/artists, tell the AI the rest."""

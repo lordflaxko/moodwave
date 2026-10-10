@@ -11,6 +11,9 @@ def test_config_reports_demo_mode(client):
         "demo_allowed": True,
         "spotify_enabled": False,
         "ai_enabled": False,
+        "guest_allowed": False,
+        "guest_playlists_per_day": 5,
+        "guest_max_tracks": 30,
     }
 
 

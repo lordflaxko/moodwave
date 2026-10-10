@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     database_url: str = f"sqlite:///{(API_ROOT / 'moodwave.db').as_posix()}"
     # Anonymous demo sessions. Turn off on a public deploy so strangers can't spend AI credits.
     allow_demo: bool = True
+    # Guest mode: real Spotify catalog (app token) + the AI within daily limits, no saving.
+    allow_guest: bool = True
+    guest_playlists_per_day: int = 5
+    guest_ai_per_day: int = 40
+    guest_max_tracks: int = 30
 
     # Used to sign the session cookie and derive the token-encryption key.
     session_secret: str = "dev-only-change-me-please-0123456789abcdef"

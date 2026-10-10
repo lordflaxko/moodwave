@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 from sqlmodel import col, select
 
+from app.core.config import get_settings
 from app.deps import CurrentUser, DbSession, generation_rate_limit, get_pipeline, get_spotify
 from app.models import Playlist, PlaylistCover, PlaylistTrack, RefinementTurn
 from app.routers.feedback import load_preferences
@@ -35,7 +36,9 @@ from app.schemas import (
     UpdatePlaylistRequest,
 )
 from app.services.ai.base import AIError
+from app.services.ai.heuristic import HeuristicProvider
 from app.services.cover import CoverImageError, build_cover, process_upload
+from app.services.guest import GUEST_BUSY_NOTICE, enforce_guest_generation, guest_ai_available
 from app.services.pipeline import PlaylistPipeline, compute_stats
 from app.services.seed import load_seed
 from app.services.spotify.base import SpotifyClient, SpotifyError
@@ -51,6 +54,10 @@ def get_steered_pipeline(
     """The pipeline, steered by this listener's thumbs up/down."""
     prefs = load_preferences(db, user.id)
     pipeline.use_preferences(prefs.avoid_ids, prefs.avoid_artists, prefs.prompt_lines())
+    # Guests share a daily AI budget; past it they get the offline curator.
+    if user.is_guest and pipeline.ai.source != "heuristic" and not guest_ai_available(db):
+        pipeline.ai = HeuristicProvider()
+        pipeline.guest_notice = GUEST_BUSY_NOTICE
     return pipeline
 
 
@@ -165,6 +172,13 @@ def _needs_sync(playlist: Playlist) -> bool:
     return (_aware(playlist.updated_at) - _aware(playlist.synced_at)).total_seconds() > 1
 
 
+def _no_guests(user: CurrentUser) -> None:
+    if user.is_guest:
+        raise HTTPException(
+            403, "Guest playlists can't be saved to Spotify. Sign in with Spotify and this playlist comes with you."
+        )
+
+
 def _spotify_description(playlist: Playlist) -> str:
     return f"{playlist.description} Made with Moodwave from: “{playlist.prompt}”"
 
@@ -223,6 +237,16 @@ async def generate(body: GenerateRequest, user: CurrentUser, db: DbSession, pipe
 async def _generate_and_store(
     body: GenerateRequest, user: CurrentUser, db: DbSession, pipeline: PlaylistPipeline
 ) -> PlaylistOut:
+    guest_notes: list[str] = []
+    if user.is_guest:
+        enforce_guest_generation(db, user)
+        limit = get_settings().guest_max_tracks
+        if body.length > limit:
+            body = body.model_copy(update={"length": limit})
+            guest_notes.append(f"Guest playlists are up to {limit} songs; sign in with Spotify for up to 100.")
+        body = body.model_copy(update={"use_my_taste": False})
+        if getattr(pipeline, "guest_notice", None):
+            guest_notes.append(pipeline.guest_notice)
     seed = await load_seed(body.seed_url, pipeline.spotify) if body.seed_url else None
     result = await pipeline.generate(
         body.prompt.strip(),
@@ -246,7 +270,8 @@ async def _generate_and_store(
     db.add(playlist)
     db.commit()
     db.refresh(playlist)
-    return _to_out(playlist, result.notice)
+    notice = " ".join(n for n in [result.notice, *guest_notes] if n) or None
+    return _to_out(playlist, notice)
 
 
 # Streamed generations keep running if the tab closes; the playlist still lands in the library.
@@ -453,6 +478,7 @@ async def replace_one(
 
 @router.post("/{playlist_id}/save", response_model=PlaylistOut)
 async def save_to_spotify(playlist_id: str, user: CurrentUser, db: DbSession, spotify: SpotifyDep) -> PlaylistOut:
+    _no_guests(user)
     playlist = _get_owned(db, user, playlist_id)
     tracks = _tracks(playlist)
     saved = await spotify.create_playlist(playlist.title, _spotify_description(playlist), [t.uri for t in tracks])
@@ -469,6 +495,7 @@ async def save_to_spotify(playlist_id: str, user: CurrentUser, db: DbSession, sp
 @router.post("/{playlist_id}/sync", response_model=PlaylistOut)
 async def sync_to_spotify(playlist_id: str, user: CurrentUser, db: DbSession, spotify: SpotifyDep) -> PlaylistOut:
     """Make the saved Spotify copy match: name, description, songs in order, and the cover."""
+    _no_guests(user)
     playlist = _get_owned(db, user, playlist_id)
     if not playlist.spotify_playlist_id:
         raise HTTPException(409, "Save this playlist to Spotify first.")

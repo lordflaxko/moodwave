@@ -15,6 +15,7 @@ from app.core.security import (
     new_oauth_challenge,
     oauth_return_to,
     read_handoff,
+    read_session,
     sign_handoff,
     sign_session,
     verify_oauth_state,
@@ -22,6 +23,7 @@ from app.core.security import (
 from app.deps import DbSession, SettingsDep, get_optional_user
 from app.models import User
 from app.schemas import AppConfigOut, ExchangeRequest, SessionOut, UserOut
+from app.services.guest import check_guest_start, merge_guest_into
 from app.services.spotify.base import SpotifyError
 from app.services.spotify.oauth import authorize_url, exchange_code, store_tokens
 
@@ -30,7 +32,13 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 def _user_out(user: User) -> UserOut:
-    return UserOut(id=user.id, display_name=user.display_name, avatar_url=user.avatar_url, is_demo=user.is_demo)
+    return UserOut(
+        id=user.id,
+        display_name=user.display_name,
+        avatar_url=user.avatar_url,
+        is_demo=user.is_demo,
+        is_guest=user.is_guest,
+    )
 
 
 def _safe_return_to(url: str | None, settings: Settings) -> str | None:
@@ -66,7 +74,15 @@ def app_config(settings: SettingsDep) -> AppConfigOut:
         demo_allowed=settings.allow_demo,
         spotify_enabled=settings.spotify_enabled,
         ai_enabled=settings.ai_enabled,
+        guest_allowed=_guest_allowed(settings),
+        guest_playlists_per_day=settings.guest_playlists_per_day,
+        guest_max_tracks=settings.guest_max_tracks,
     )
+
+
+def _guest_allowed(settings: Settings) -> bool:
+    # Guests need the app's Spotify credentials for catalog search.
+    return settings.allow_guest and settings.spotify_enabled and not settings.demo_mode
 
 
 @router.get("/me", response_model=UserOut | None)
@@ -166,6 +182,12 @@ def exchange(body: ExchangeRequest, db: DbSession) -> SessionOut:
     if user is None or body.code in _used_handoffs:
         raise HTTPException(400, "That sign-in link has expired. Please sign in again.")
     _used_handoffs.add(body.code)
+    # Signing in from a guest session: bring the guest's playlists along.
+    guest_id = read_session(body.guest_token) if body.guest_token else None
+    guest = db.get(User, guest_id) if guest_id else None
+    if guest is not None and guest.is_guest and guest.id != user.id:
+        moved = merge_guest_into(db, guest, user)
+        log.info("Moved %s guest playlists into a signed-in account", moved)
     return SessionOut(token=sign_session(user.id), user=_user_out(user))
 
 
@@ -193,6 +215,20 @@ def start_demo(request: Request, response: Response, db: DbSession, settings: Se
 def start_demo_token(db: DbSession, settings: SettingsDep) -> SessionOut:
     """Demo session as a bearer token, for the Framer site."""
     user = _new_demo_user(db, settings)
+    return SessionOut(token=sign_session(user.id), user=_user_out(user))
+
+
+@router.post("/guest/token", response_model=SessionOut)
+def start_guest(request: Request, db: DbSession, settings: SettingsDep) -> SessionOut:
+    """Try Moodwave without Spotify: real catalog and AI within daily limits, no saving."""
+    if not _guest_allowed(settings):
+        raise HTTPException(403, "Guest mode is switched off here. Sign in with Spotify instead.")
+    forwarded = request.headers.get("x-forwarded-for", "")
+    check_guest_start(forwarded.split(",")[0].strip() or (request.client.host if request.client else "?"))
+    user = User(display_name="Guest", is_guest=True)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
     return SessionOut(token=sign_session(user.id), user=_user_out(user))
 
 

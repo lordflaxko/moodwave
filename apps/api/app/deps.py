@@ -14,6 +14,7 @@ from app.models import User
 from app.services.ai.base import AIProvider
 from app.services.ai.claude import ClaudeProvider
 from app.services.ai.heuristic import HeuristicProvider
+from app.services.guest import app_access_token
 from app.services.pipeline import PlaylistPipeline
 from app.services.spotify.base import SpotifyClient
 from app.services.spotify.client import SpotifyHttpClient
@@ -49,6 +50,9 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 def get_spotify(user: CurrentUser, db: DbSession, settings: SettingsDep) -> SpotifyClient:
     if user.is_demo or settings.demo_mode:
         return MockSpotifyClient(user.id)
+    if user.is_guest:
+        # Catalog-only access with the app's own token; guests have no Spotify account here.
+        return SpotifyHttpClient(app_access_token)
 
     async def token_provider() -> str:
         return await get_valid_access_token(db, user.id)
