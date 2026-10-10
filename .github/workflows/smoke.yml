@@ -1,0 +1,47 @@
+name: Live smoke test
+
+# Checks the live site and API once a day (no secrets, no AI cost).
+# A failure emails the repository owner. Run by hand from the Actions tab too.
+on:
+  schedule:
+    - cron: "30 13 * * *"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      API: https://moodwave-api.onrender.com
+      SITE: https://moodwave.framer.ai
+    steps:
+      - name: Wake the API (free instances can be asleep)
+        run: |
+          for i in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 "$API/health") && [ "$code" = "200" ] && exit 0
+            sleep 15
+          done
+          echo "API never answered /health"; exit 1
+
+      - name: Check the live site and API
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+          expect() { [ "$1" = "$2" ] || fail "$3 (got $1, wanted $2)"; }
+
+          expect "$(curl -s -o /dev/null -w '%{http_code}' -I "$API/health")" 200 "HEAD /health"
+          config=$(curl -s "$API/auth/config")
+          echo "config: $config"
+          echo "$config" | python3 -c "import json,sys; c=json.load(sys.stdin); assert c['spotify_enabled'] and c['guest_allowed'], c" || fail "/auth/config"
+
+          expect "$(curl -s -o /dev/null -w '%{http_code}' -L "$SITE/")" 200 "site home"
+          expect "$(curl -s -o /dev/null -w '%{http_code}' -L "$SITE/create")" 200 "site /create"
+          expect "$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS "$API/playlists" -H "Origin: $SITE" -H 'Access-Control-Request-Method: GET' -H 'Access-Control-Request-Headers: authorization')" 200 "CORS from the site"
+          expect "$(curl -s -o /dev/null -w '%{http_code}' "$API/share/smoke-test-missing")" 404 "missing share link"
+          expect "$(curl -s -o /dev/null -w '%{http_code}' "$API/share/featured")" 200 "featured list"
+
+          # Guest round trip exercises the database without using the AI.
+          token=$(curl -s -X POST -H "Origin: $SITE" "$API/auth/guest/token" | python3 -c "import json,sys; print(json.load(sys.stdin)['token'])")
+          [ -n "$token" ] || fail "guest token"
+          curl -s -H "Authorization: Bearer $token" "$API/auth/me" | python3 -c "import json,sys; assert json.load(sys.stdin)['is_guest']" || fail "guest session"
+          expect "$(curl -s -o /dev/null -w '%{http_code}' -X DELETE -H "Authorization: Bearer $token" "$API/auth/me")" 204 "guest cleanup"
+          echo "All live checks passed."
