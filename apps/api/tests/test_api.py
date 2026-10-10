@@ -291,3 +291,67 @@ def test_generate_rejects_bad_seed_link(demo_client):
         "/playlists/generate", json={"prompt": "more like this", "length": 15, "seed_url": "https://example.com/x"}
     )
     assert res.status_code == 422
+
+
+def test_cover_grid_single_and_auto(demo_client):
+    playlist = _make_playlist(demo_client)
+    seen, ids = set(), []
+    for t in playlist["tracks"]:
+        if t["image_url"] and t["image_url"] not in seen:
+            seen.add(t["image_url"])
+            ids.append(t["id"])
+    url = f"/playlists/{playlist['id']}/cover"
+
+    grid = demo_client.put(url, json={"mode": "grid", "track_ids": ids[:4]}).json()
+    assert grid["cover"]["mode"] == "grid" and grid["cover"]["track_ids"] == ids[:4]
+    assert len(grid["cover"]["images"]) == 4
+
+    single = demo_client.put(url, json={"mode": "single", "track_ids": [ids[2]]}).json()
+    assert single["cover"]["images"] == [next(t["image_url"] for t in playlist["tracks"] if t["id"] == ids[2])]
+    summary = next(p for p in demo_client.get("/playlists").json() if p["id"] == playlist["id"])
+    assert summary["cover_images"] == single["cover"]["images"]
+
+    assert demo_client.put(url, json={"mode": "grid", "track_ids": ids[:2]}).status_code == 422
+    assert demo_client.put(url, json={"mode": "single", "track_ids": ["nope"]}).status_code == 422
+    assert demo_client.put(url, json={"mode": "auto"}).json()["cover"]["mode"] == "auto"
+
+
+def test_cover_upload_is_served_and_cleaned_up(demo_client):
+    import base64
+    import io
+
+    from PIL import Image
+
+    playlist = _make_playlist(demo_client)
+    buffer = io.BytesIO()
+    Image.new("RGBA", (900, 500), (200, 50, 90, 255)).save(buffer, "PNG")
+    data_url = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
+
+    out = demo_client.put(f"/playlists/{playlist['id']}/cover/image", json={"image": data_url}).json()
+    assert out["cover"]["mode"] == "upload"
+    path = out["cover"]["images"][0]
+    demo_client.cookies.clear()  # the image is public by id
+    image = demo_client.get(path)
+    assert image.status_code == 200 and image.headers["content-type"] == "image/jpeg"
+    assert Image.open(io.BytesIO(image.content)).size == (640, 640)
+
+
+def test_cover_upload_rejects_non_images(demo_client):
+    playlist = _make_playlist(demo_client)
+    junk = "data:image/png;base64," + "QUJD" * 40
+    assert demo_client.put(f"/playlists/{playlist['id']}/cover/image", json={"image": junk}).status_code == 422
+
+
+def test_deleting_playlist_removes_uploaded_cover(demo_client):
+    import base64
+    import io
+
+    from PIL import Image
+
+    playlist = _make_playlist(demo_client)
+    buffer = io.BytesIO()
+    Image.new("RGB", (300, 300), (10, 120, 200)).save(buffer, "JPEG")
+    body = {"image": base64.b64encode(buffer.getvalue()).decode()}
+    path = demo_client.put(f"/playlists/{playlist['id']}/cover/image", json=body).json()["cover"]["images"][0]
+    assert demo_client.delete(f"/playlists/{playlist['id']}").status_code == 204
+    assert demo_client.get(path).status_code == 404

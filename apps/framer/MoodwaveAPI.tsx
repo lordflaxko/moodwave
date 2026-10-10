@@ -103,6 +103,13 @@ export interface Playlist {
     synced_at?: string | null
     /** Saved to Spotify, then edited here since. */
     needs_sync?: boolean
+    cover?: PlaylistCoverChoice
+}
+export interface PlaylistCoverChoice {
+    mode: "auto" | "grid" | "single" | "upload"
+    track_ids: string[]
+    /** What the cover shows: 4 images (grid) or 1 (single/upload). */
+    images: (string | null)[]
 }
 export interface PlaylistSummary {
     id: string
@@ -332,6 +339,8 @@ export function go(path: string) {
  */
 export function sized(url: string | null | undefined, px: number): string {
     if (!url) return ""
+    // Uploaded covers are served by the API (paths like /playlists/{id}/cover.jpg?v=…).
+    if (url.startsWith("/")) return `${API_URL}${url}`
     if (url.includes("framerusercontent.com/images/")) return `${url.split("?")[0]}?scale-down-to=${px <= 256 ? 256 : px <= 512 ? 512 : 1024}`
     if (url.includes("dzcdn.net")) {
         const s = px <= 250 ? 250 : px <= 500 ? 500 : 1000

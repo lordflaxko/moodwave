@@ -15,6 +15,7 @@ import {
     SANS,
     SERIF,
     signIn,
+    sized,
     giveFeedback,
     PlayerDock,
     playQueue,
@@ -309,6 +310,266 @@ function TrackRow({ t, i, narrow, accent, player, queue, isNew, verdict, editabl
     )
 }
 
+type CoverMode = "auto" | "grid" | "single" | "upload"
+
+/** Shrink big photos before upload (phones take 12 MP pictures); the API crops to 640px. */
+function downscale(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file)
+        const img = new Image()
+        img.onload = () => {
+            const scale = Math.min(1, 1600 / Math.max(img.width, img.height))
+            const canvas = document.createElement("canvas")
+            canvas.width = Math.max(1, Math.round(img.width * scale))
+            canvas.height = Math.max(1, Math.round(img.height * scale))
+            const ctx = canvas.getContext("2d")
+            if (!ctx) return reject(new Error("Couldn't read that image."))
+            ctx.fillStyle = "#0b0a0d"
+            ctx.fillRect(0, 0, canvas.width, canvas.height)
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+            URL.revokeObjectURL(url)
+            resolve(canvas.toDataURL("image/jpeg", 0.9))
+        }
+        img.onerror = () => {
+            URL.revokeObjectURL(url)
+            reject(new Error("That file isn't an image we can use. Try a JPEG or PNG."))
+        }
+        img.src = url
+    })
+}
+
+function CoverEditor({ playlist, accent, onClose, onSaved }: { playlist: Playlist; accent: string; onClose: () => void; onSaved: (p: Playlist) => void }) {
+    const current = playlist.cover
+    const [mode, setMode] = useState<CoverMode>(current?.mode ?? "auto")
+    const [picks, setPicks] = useState<string[]>(current && (current.mode === "grid" || current.mode === "single") ? current.track_ids : [])
+    const [upload, setUpload] = useState<string | null>(null)
+    const [saving, setSaving] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const [hint, setHint] = useState<string | null>(null)
+    const fileRef = useRef<HTMLInputElement>(null)
+    const panelRef = useRef<HTMLDivElement>(null)
+
+    // One tile per distinct piece of artwork.
+    const options: Track[] = []
+    const seenArt = new Set<string>()
+    for (const t of playlist.tracks) {
+        if (t.image_url && !seenArt.has(t.image_url)) {
+            seenArt.add(t.image_url)
+            options.push(t)
+        }
+    }
+    const art = (id: string) => playlist.tracks.find((t: Track) => t.id === id)?.image_url ?? null
+    const existingUpload = current?.mode === "upload" ? current.images[0] : null
+
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose()
+        window.addEventListener("keydown", onKey)
+        panelRef.current?.focus()
+        const overflow = document.body.style.overflow
+        document.body.style.overflow = "hidden"
+        return () => {
+            window.removeEventListener("keydown", onKey)
+            document.body.style.overflow = overflow
+        }
+    }, [])
+
+    const choose = (next: CoverMode) => {
+        setMode(next)
+        setError(null)
+        setHint(null)
+        if (next === "single") setPicks((p) => p.slice(0, 1))
+        if (next === "upload" && !upload && !existingUpload) fileRef.current?.click()
+    }
+
+    const toggle = (id: string) => {
+        setError(null)
+        if (mode === "single") return setPicks([id])
+        setPicks((p) => {
+            if (p.includes(id)) return p.filter((x) => x !== id)
+            if (p.length >= 4) {
+                setHint("A grid uses four — tap one to drop it first.")
+                return p
+            }
+            setHint(null)
+            return [...p, id]
+        })
+    }
+
+    const preview: (string | null)[] =
+        mode === "upload"
+            ? [upload ?? existingUpload]
+            : mode === "grid"
+              ? picks.length === 4
+                  ? picks.map(art)
+                  : []
+              : mode === "single"
+                ? picks.slice(0, 1).map(art)
+                : playlist.tracks.slice(0, 4).map((t: Track) => t.image_url)
+    const ready = mode === "auto" || (mode === "grid" && picks.length === 4) || (mode === "single" && picks.length === 1) || (mode === "upload" && Boolean(upload || existingUpload))
+
+    const save = async () => {
+        if (!ready || saving) return
+        setSaving(true)
+        setError(null)
+        try {
+            let next: Playlist
+            if (mode === "upload") {
+                if (!upload) return onClose()
+                next = await api<Playlist>(`/playlists/${playlist.id}/cover/image`, { method: "PUT", body: JSON.stringify({ image: upload }) })
+            } else {
+                next = await api<Playlist>(`/playlists/${playlist.id}/cover`, { method: "PUT", body: JSON.stringify({ mode, track_ids: mode === "auto" ? [] : picks }) })
+            }
+            onSaved(next)
+        } catch (e) {
+            setError((e as Error).message)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    const tab = (key: CoverMode, label: string) => (
+        <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={mode === key}
+            onClick={() => choose(key)}
+            style={{ flex: 1, border: "none", borderRadius: 100, padding: "8px 10px", fontFamily: SANS, fontSize: 13, cursor: "pointer", background: mode === key ? C.text : "transparent", color: mode === key ? C.ink : C.subtle, transition: "background 0.25s ease, color 0.25s ease", whiteSpace: "nowrap" }}
+        >
+            {label}
+        </button>
+    )
+
+    return createPortal(
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            style={{ position: "fixed", inset: 0, zIndex: 60, background: "rgba(11,10,13,0.78)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", display: "grid", placeItems: "center", padding: 16 }}
+        >
+            <motion.div
+                ref={panelRef}
+                role="dialog"
+                aria-modal="true"
+                aria-label="Edit cover"
+                tabIndex={-1}
+                initial={{ y: 24, opacity: 0, scale: 0.98 }}
+                animate={{ y: 0, opacity: 1, scale: 1 }}
+                exit={{ y: 24, opacity: 0 }}
+                transition={{ duration: 0.45, ease: EASE }}
+                onClick={(e) => e.stopPropagation()}
+                style={{ width: "100%", maxWidth: 640, maxHeight: "calc(100vh - 32px)", overflow: "auto", borderRadius: 24, background: C.surface, border: `1px solid ${C.line2}`, boxShadow: "0 40px 120px -30px rgba(0,0,0,0.95)", padding: 20, fontFamily: SANS, color: C.text, outline: "none", boxSizing: "border-box" }}
+            >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                    <div style={eyebrow}>Edit cover</div>
+                    <button type="button" aria-label="Close" onClick={onClose} style={{ width: 30, height: 30, borderRadius: 30, border: "none", background: C.surface3, color: C.text, cursor: "pointer" }}>
+                        ×
+                    </button>
+                </div>
+
+                <div style={{ display: "flex", gap: 18, alignItems: "center", flexWrap: "wrap" }}>
+                    <div style={{ width: 150, flexShrink: 0, boxShadow: "0 20px 50px -20px rgba(0,0,0,0.9)", borderRadius: 16 }}>
+                        {preview.length && preview[0] ? (
+                            <Collage images={preview} size="100%" radius={16} />
+                        ) : (
+                            <div style={{ width: "100%", aspectRatio: "1 / 1", borderRadius: 16, border: `1px dashed ${C.line2}`, display: "grid", placeItems: "center", textAlign: "center", padding: 12, boxSizing: "border-box", fontSize: 12.5, color: C.subtle }}>
+                                {mode === "grid" ? `Pick ${4 - picks.length} more` : mode === "upload" ? "Choose an image" : "Pick a song"}
+                            </div>
+                        )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 220 }}>
+                        <div role="tablist" aria-label="Cover style" style={{ display: "flex", borderRadius: 100, background: "rgba(242,239,233,0.05)", padding: 3, gap: 2 }}>
+                            {tab("auto", "Auto")}
+                            {tab("grid", "Grid of 4")}
+                            {tab("single", "One cover")}
+                            {tab("upload", "Upload")}
+                        </div>
+                        <p style={{ fontSize: 13.5, lineHeight: 1.5, color: C.subtle, margin: "12px 0 0" }}>
+                            {mode === "auto"
+                                ? "The first four songs' artwork, updated as the playlist changes."
+                                : mode === "grid"
+                                  ? "Tap four songs below, in the order you want them (left to right, top to bottom)."
+                                  : mode === "single"
+                                    ? "Tap one song below to use its artwork full size."
+                                    : "Use any image. It's cropped to a square from the centre."}
+                        </p>
+                        {mode === "upload" ? (
+                            <button type="button" onClick={() => fileRef.current?.click()} style={{ ...pill, marginTop: 12, color: C.text }}>
+                                {upload || existingUpload ? "Choose a different image" : "Choose an image"}
+                            </button>
+                        ) : null}
+                    </div>
+                </div>
+
+                <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    hidden
+                    onChange={async (e) => {
+                        const file = e.target.files?.[0]
+                        e.target.value = ""
+                        if (!file) return
+                        setError(null)
+                        try {
+                            setUpload(await downscale(file))
+                            setMode("upload")
+                        } catch (err) {
+                            setError((err as Error).message)
+                        }
+                    }}
+                />
+
+                {mode === "grid" || mode === "single" ? (
+                    <div style={{ marginTop: 18 }}>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(72px, 1fr))", gap: 8 }}>
+                            {options.map((t) => {
+                                const index = picks.indexOf(t.id)
+                                const picked = index >= 0
+                                return (
+                                    <button
+                                        key={t.id}
+                                        type="button"
+                                        aria-pressed={picked}
+                                        aria-label={`${t.title} — ${t.artists[0] ?? ""}`}
+                                        title={`${t.title} — ${t.artists[0] ?? ""}`}
+                                        onClick={() => toggle(t.id)}
+                                        style={{ position: "relative", padding: 0, border: "none", borderRadius: 10, overflow: "hidden", aspectRatio: "1 / 1", cursor: "pointer", outline: picked ? `2px solid ${accent}` : "none", outlineOffset: 2, background: C.surface3 }}
+                                    >
+                                        <img src={sized(t.image_url, 256)} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", opacity: picks.length && !picked ? 0.55 : 1, transition: "opacity 0.2s ease" }} />
+                                        {picked ? (
+                                            <span style={{ position: "absolute", top: 5, left: 5, width: 20, height: 20, borderRadius: 20, background: accent, color: C.ink, fontFamily: MONO, fontSize: 11, display: "grid", placeItems: "center" }}>
+                                                {mode === "grid" ? index + 1 : "✓"}
+                                            </span>
+                                        ) : null}
+                                    </button>
+                                )
+                            })}
+                        </div>
+                        {hint ? <p style={{ fontSize: 12.5, color: C.amber, margin: "10px 0 0" }}>{hint}</p> : null}
+                    </div>
+                ) : null}
+
+                {error ? <p style={{ fontSize: 13.5, color: C.amber, margin: "16px 0 0" }}>{error}</p> : null}
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginTop: 20, paddingTop: 16, borderTop: `1px solid ${C.line}`, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 12.5, color: C.faint }}>{playlist.spotify_url ? "Then use “Update on Spotify” to change it there too." : "Used when you save to Spotify."}</span>
+                    <span style={{ display: "flex", gap: 8 }}>
+                        <button type="button" onClick={onClose} style={{ ...pill, height: 40 }}>
+                            Cancel
+                        </button>
+                        <button type="button" disabled={!ready || saving} onClick={() => void save()} style={{ ...pill, height: 40, border: "none", fontWeight: 500, background: ready ? accent : "rgba(242,239,233,0.06)", color: ready ? C.ink : C.faint, cursor: ready ? "pointer" : "default" }}>
+                            {saving ? "Saving…" : "Save cover"}
+                        </button>
+                    </span>
+                </div>
+            </motion.div>
+        </motion.div>,
+        document.body,
+    )
+}
+
 interface Toast {
     message: string
     action?: { label: string; run: () => void }
@@ -347,6 +608,7 @@ function PlaylistViewInner(props: PlaylistViewProps) {
     const [order, setOrder] = useState<Track[]>([])
     const [swapping, setSwapping] = useState<string | null>(null)
     const [renaming, setRenaming] = useState(false)
+    const [editingCover, setEditingCover] = useState(false)
     const [draftTitle, setDraftTitle] = useState("")
     const feedback = useFeedback(Boolean(session.user))
     const saveTimer = useRef(0)
@@ -590,7 +852,7 @@ function PlaylistViewInner(props: PlaylistViewProps) {
     }
 
     const canSave = session.user && !session.user.is_demo && session.config?.spotify_enabled
-    const covers = playlist.tracks.map((t: Track) => t.image_url)
+    const covers: (string | null)[] = playlist.cover?.images?.length ? playlist.cover.images : playlist.tracks.map((t: Track) => t.image_url)
     const editable = Boolean(session.user)
     const queue = queueOf(order)
     const playingHere = Boolean(player.id && queue.some((q) => q.id === player.id))
@@ -622,7 +884,20 @@ function PlaylistViewInner(props: PlaylistViewProps) {
                 style={{ display: "flex", flexDirection: narrow ? "column" : "row", gap: narrow ? 28 : 48, alignItems: narrow ? "stretch" : "flex-end" }}
             >
                 <div style={{ width: narrow ? "100%" : 320, boxShadow: "0 40px 90px -30px rgba(0,0,0,0.9)", borderRadius: 24 }}>
-                    <Collage images={covers} size="100%" radius={24} />
+                    <div style={{ position: "relative" }} className="mw-cover">
+                        <Collage images={covers} size="100%" radius={24} />
+                        {editable ? (
+                            <button
+                                type="button"
+                                onClick={() => setEditingCover(true)}
+                                className="mw-cover-edit"
+                                style={{ ...pill, position: "absolute", right: 12, bottom: 12, height: 36, background: "rgba(11,10,13,0.72)", backdropFilter: "blur(10px)", WebkitBackdropFilter: "blur(10px)", color: C.text, border: `1px solid ${C.line2}` }}
+                            >
+                                ✎ Edit cover
+                            </button>
+                        ) : null}
+                        <style>{`.mw-cover .mw-cover-edit{opacity:${narrow ? 1 : 0};transition:opacity .25s ease}.mw-cover:hover .mw-cover-edit,.mw-cover .mw-cover-edit:focus-visible{opacity:1}`}</style>
+                    </div>
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={eyebrow}>
@@ -891,6 +1166,22 @@ function PlaylistViewInner(props: PlaylistViewProps) {
                 </AnimatePresence>,
                 document.body,
             )}
+
+            <AnimatePresence>
+                {editingCover ? (
+                    <CoverEditor
+                        key="cover"
+                        playlist={playlist}
+                        accent={accent}
+                        onClose={() => setEditingCover(false)}
+                        onSaved={(next) => {
+                            setPlaylist(next)
+                            setEditingCover(false)
+                            setFlash(next.spotify_url ? "Cover updated — use “Update on Spotify” to change it there too." : "Cover updated.")
+                        }}
+                    />
+                ) : null}
+            </AnimatePresence>
 
             <PlayerDock accent={accent} />
 

@@ -3,7 +3,7 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, Column
+from sqlalchemy import JSON, Column, LargeBinary
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -47,6 +47,8 @@ class Playlist(SQLModel, table=True):
     spotify_url: str | None = None
     # When the Spotify copy last matched this playlist (save or sync).
     synced_at: datetime | None = None
+    # Cover choice: {"mode": "auto" | "grid" | "single" | "upload", "track_ids": [...], "v": version}.
+    cover: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     created_at: datetime = Field(default_factory=_now, index=True)
     updated_at: datetime = Field(default_factory=_now)
 
@@ -105,3 +107,11 @@ class TrackFeedback(SQLModel, table=True):
     artist: str = ""
     verdict: str = Field(description="up | down")
     created_at: datetime = Field(default_factory=_now)
+
+
+class PlaylistCover(SQLModel, table=True):
+    """An uploaded cover image (processed 640px JPEG), kept apart so playlist rows stay light."""
+
+    playlist_id: str = Field(foreign_key="playlist.id", primary_key=True)
+    jpeg: bytes = Field(sa_column=Column(LargeBinary, nullable=False))
+    updated_at: datetime = Field(default_factory=_now)

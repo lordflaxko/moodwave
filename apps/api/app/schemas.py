@@ -94,6 +94,26 @@ class GenerateRequest(BaseModel):
     )
 
 
+class CoverRequest(BaseModel):
+    """Pick the cover: automatic, a 2x2 grid of four songs' artwork, or one song's artwork."""
+
+    mode: Literal["auto", "grid", "single"]
+    track_ids: list[str] = Field(default_factory=list, max_length=4)
+
+
+class CoverImageRequest(BaseModel):
+    """An uploaded image as a data URL or plain base64 (JPEG, PNG, WebP, ...)."""
+
+    image: str = Field(min_length=100, max_length=14_000_000)
+
+
+class CoverOut(BaseModel):
+    mode: Literal["auto", "grid", "single", "upload"] = "auto"
+    track_ids: list[str] = Field(default_factory=list)
+    # What the cover shows: 4 images (grid), 1 (single/upload). Upload URLs are paths on this API.
+    images: list[str | None] = Field(default_factory=list)
+
+
 class RefineRequest(BaseModel):
     instruction: str = Field(min_length=2, max_length=300)
 
@@ -148,6 +168,7 @@ class PlaylistOut(BaseModel):
     synced_at: datetime | None = None
     # Saved to Spotify, then edited here since: offer "Update on Spotify".
     needs_sync: bool = False
+    cover: CoverOut = Field(default_factory=CoverOut)
 
 
 class PlaylistSummary(BaseModel):

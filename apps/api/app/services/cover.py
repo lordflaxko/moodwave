@@ -8,12 +8,14 @@ import io
 import logging
 
 import httpx
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 
 from app.schemas import Track
 
 log = logging.getLogger(__name__)
 SIZE = 640
+# Uploads: refuse decompression bombs early (a 6000x6000 photo is 36M pixels).
+Image.MAX_IMAGE_PIXELS = 50_000_000
 _MAX_BASE64 = 256 * 1024
 _LILAC = (198, 177, 240)
 _INK = (11, 10, 13)
@@ -39,6 +41,30 @@ async def _fetch(client: httpx.AsyncClient, url: str) -> Image.Image | None:
     except Exception as exc:  # noqa: BLE001 - a missing cover just leaves a tile out
         log.info("Cover fetch failed for %s: %s", url, exc)
         return None
+
+
+class CoverImageError(ValueError):
+    """The upload isn't an image we can use."""
+
+
+def process_upload(data: bytes) -> bytes:
+    """Any image upload -> centre-cropped 640px JPEG within Spotify's limit (no mark: it's yours)."""
+    if len(data) > 10 * 1024 * 1024:
+        raise CoverImageError("That image is too large (10 MB max).")
+    try:
+        image = Image.open(io.BytesIO(data))
+        image = ImageOps.exif_transpose(image)
+        if image.mode in ("RGBA", "LA", "P"):
+            image = image.convert("RGBA")
+            background = Image.new("RGB", image.size, _INK)
+            background.paste(image, mask=image.getchannel("A"))
+            image = background
+        image = ImageOps.fit(image.convert("RGB"), (SIZE, SIZE), Image.LANCZOS)
+    except CoverImageError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - corrupt, unsupported or oversized
+        raise CoverImageError("That file isn't an image we can use. Try a JPEG or PNG.") from exc
+    return to_jpeg(image)
 
 
 def compose(images: list[Image.Image]) -> Image.Image:
@@ -73,9 +99,9 @@ def to_jpeg(image: Image.Image) -> bytes:
     return buffer.getvalue()
 
 
-async def build_cover(tracks: list[Track]) -> bytes | None:
-    """A JPEG cover for these tracks, or None when there's no artwork to use."""
-    urls = cover_urls(tracks)
+async def build_cover(tracks: list[Track], count: int = 4) -> bytes | None:
+    """A JPEG cover for these tracks (a grid of 4, or one full-bleed), or None without artwork."""
+    urls = cover_urls(tracks, count)
     if not urls:
         return None
     async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:

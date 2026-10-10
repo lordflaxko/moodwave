@@ -42,3 +42,21 @@ def test_parse_spotify_links():
     )
     assert parse_link("spotify:track:4uLU6hMCjMI75M1A2tKUQC") == ("track", "4uLU6hMCjMI75M1A2tKUQC")
     assert parse_link("https://example.com/track/abc") is None
+
+
+def test_process_upload_crops_square_and_fits():
+    import io
+
+    from app.services.cover import CoverImageError, process_upload
+
+    buffer = io.BytesIO()
+    Image.effect_noise((1600, 900), 120).convert("RGB").save(buffer, "PNG")
+    jpeg = process_upload(buffer.getvalue())
+    assert Image.open(io.BytesIO(jpeg)).size == (SIZE, SIZE)
+    assert len(jpeg) * 4 / 3 < 256 * 1024
+    try:
+        process_upload(b"not an image at all")
+    except CoverImageError:
+        pass
+    else:
+        raise AssertionError("expected CoverImageError")

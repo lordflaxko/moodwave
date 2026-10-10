@@ -1,6 +1,8 @@
 """Playlist generation, refinement, editing, persistence and saving to Spotify."""
 
 import asyncio
+import base64
+import binascii
 import json
 import logging
 import traceback
@@ -8,15 +10,18 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import StreamingResponse
 from sqlmodel import col, select
 
 from app.deps import CurrentUser, DbSession, generation_rate_limit, get_pipeline, get_spotify
-from app.models import Playlist, PlaylistTrack, RefinementTurn
+from app.models import Playlist, PlaylistCover, PlaylistTrack, RefinementTurn
 from app.routers.feedback import load_preferences
 from app.routers.telemetry import record_error
 from app.schemas import (
+    CoverImageRequest,
+    CoverOut,
+    CoverRequest,
     GenerateRequest,
     MusicalIntent,
     PlaylistOut,
@@ -28,7 +33,7 @@ from app.schemas import (
     UpdatePlaylistRequest,
 )
 from app.services.ai.base import AIError
-from app.services.cover import build_cover
+from app.services.cover import CoverImageError, build_cover, process_upload
 from app.services.pipeline import PlaylistPipeline, compute_stats
 from app.services.seed import load_seed
 from app.services.spotify.base import SpotifyClient, SpotifyError
@@ -108,6 +113,42 @@ def _to_out(playlist: Playlist, notice: str | None = None) -> PlaylistOut:
         updated_at=playlist.updated_at,
         synced_at=playlist.synced_at,
         needs_sync=_needs_sync(playlist),
+        cover=_cover_out(playlist, tracks),
+    )
+
+
+def _chosen(playlist: Playlist, tracks: list[Track]) -> tuple[str, list[Track]]:
+    """The effective cover mode and the songs whose artwork it uses.
+
+    A grid or single choice whose songs were since removed falls back to automatic.
+    """
+    config = playlist.cover or {}
+    mode = config.get("mode", "auto")
+    if mode == "upload":
+        return mode, []
+    if mode in ("grid", "single"):
+        by_id = {t.id: t for t in tracks}
+        chosen = [by_id[i] for i in config.get("track_ids", []) if i in by_id and by_id[i].image_url]
+        if len(chosen) >= (4 if mode == "grid" else 1):
+            return mode, chosen[: 4 if mode == "grid" else 1]
+    return "auto", tracks
+
+
+def _cover_images(playlist: Playlist, tracks: list[Track]) -> list[str | None]:
+    mode, chosen = _chosen(playlist, tracks)
+    if mode == "upload":
+        return [f"/playlists/{playlist.id}/cover.jpg?v={(playlist.cover or {}).get('v', 0)}"]
+    if mode == "auto":
+        return [t.image_url for t in tracks[:4]]
+    return [t.image_url for t in chosen]
+
+
+def _cover_out(playlist: Playlist, tracks: list[Track]) -> CoverOut:
+    mode, chosen = _chosen(playlist, tracks)
+    return CoverOut(
+        mode=mode,
+        track_ids=[t.id for t in chosen] if mode in ("grid", "single") else [],
+        images=_cover_images(playlist, tracks),
     )
 
 
@@ -125,12 +166,22 @@ def _spotify_description(playlist: Playlist) -> str:
     return f"{playlist.description} Made with Moodwave from: “{playlist.prompt}”"
 
 
-async def _apply_cover(spotify: SpotifyClient, spotify_id: str, tracks: list[Track]) -> str | None:
-    """Upload the grid cover. Never fails the save; returns a notice when the cover couldn't be set."""
+async def _cover_jpeg(db: DbSession, playlist: Playlist, tracks: list[Track]) -> bytes | None:
+    mode, chosen = _chosen(playlist, tracks)
+    if mode == "upload":
+        stored = db.get(PlaylistCover, playlist.id)
+        return stored.jpeg if stored else None
+    return await build_cover(chosen, 1 if mode == "single" else 4)
+
+
+async def _apply_cover(
+    spotify: SpotifyClient, spotify_id: str, db: DbSession, playlist: Playlist, tracks: list[Track]
+) -> str | None:
+    """Upload the chosen cover. Never fails the save; returns a notice when the cover couldn't be set."""
     if spotify.is_demo:
         return None
     try:
-        jpeg = await build_cover(tracks)
+        jpeg = await _cover_jpeg(db, playlist, tracks)
         if jpeg:
             await spotify.set_cover(spotify_id, jpeg)
         return None
@@ -283,7 +334,7 @@ def list_playlists(user: CurrentUser, db: DbSession) -> list[PlaylistSummary]:
                 prompt=p.prompt,
                 moods=p.intent.get("moods", [])[:3],
                 energy=p.intent.get("energy", 0.5),
-                cover_images=[t.image_url for t in tracks[:4]],
+                cover_images=_cover_images(p, tracks),
                 cover_seeds=[t.album for t in tracks[:4]],
                 track_count=len(tracks),
                 total_duration_ms=sum(t.duration_ms for t in tracks),
@@ -400,7 +451,7 @@ async def save_to_spotify(playlist_id: str, user: CurrentUser, db: DbSession, sp
     playlist = _get_owned(db, user, playlist_id)
     tracks = _tracks(playlist)
     saved = await spotify.create_playlist(playlist.title, _spotify_description(playlist), [t.uri for t in tracks])
-    notice = await _apply_cover(spotify, saved.id, tracks)
+    notice = await _apply_cover(spotify, saved.id, db, playlist, tracks)
     now = datetime.now(UTC)
     playlist.spotify_playlist_id, playlist.spotify_url = saved.id, saved.url
     playlist.updated_at = playlist.synced_at = now
@@ -427,7 +478,7 @@ async def sync_to_spotify(playlist_id: str, user: CurrentUser, db: DbSession, sp
                 404, "That playlist is gone from your Spotify. Save it again to make a new copy."
             ) from exc
         raise
-    notice = await _apply_cover(spotify, playlist.spotify_playlist_id, tracks)
+    notice = await _apply_cover(spotify, playlist.spotify_playlist_id, db, playlist, tracks)
     now = datetime.now(UTC)
     playlist.updated_at = playlist.synced_at = now
     db.add(playlist)
@@ -436,7 +487,75 @@ async def sync_to_spotify(playlist_id: str, user: CurrentUser, db: DbSession, sp
     return _to_out(playlist, notice)
 
 
+@router.put("/{playlist_id}/cover", response_model=PlaylistOut)
+def set_cover(playlist_id: str, body: CoverRequest, user: CurrentUser, db: DbSession) -> PlaylistOut:
+    """Choose the cover: automatic, a grid of four songs' artwork, or one song's artwork."""
+    playlist = _get_owned(db, user, playlist_id)
+    tracks = {t.id: t for t in _tracks(playlist)}
+    ids = list(dict.fromkeys(body.track_ids))
+    need = {"auto": 0, "grid": 4, "single": 1}[body.mode]
+    if len(ids) != need:
+        raise HTTPException(422, f"Pick {need} song{'s' if need != 1 else ''} for this cover.")
+    if any(i not in tracks or not tracks[i].image_url for i in ids):
+        raise HTTPException(422, "Pick songs from this playlist that have artwork.")
+    if body.mode == "grid" and len({tracks[i].image_url for i in ids}) < 4:
+        raise HTTPException(422, "Pick four songs with different artwork for a grid.")
+    _drop_upload(db, playlist.id)
+    playlist.cover = None if body.mode == "auto" else {"mode": body.mode, "track_ids": ids}
+    playlist.updated_at = datetime.now(UTC)
+    db.add(playlist)
+    db.commit()
+    db.refresh(playlist)
+    return _to_out(playlist)
+
+
+@router.put("/{playlist_id}/cover/image", response_model=PlaylistOut)
+async def upload_cover(playlist_id: str, body: CoverImageRequest, user: CurrentUser, db: DbSession) -> PlaylistOut:
+    """Use your own image as the cover (cropped square, 640px, within Spotify's size limit)."""
+    playlist = _get_owned(db, user, playlist_id)
+    raw = body.image.split(",", 1)[1] if body.image.startswith("data:") else body.image
+    try:
+        data = base64.b64decode(raw, validate=False)
+        jpeg = await asyncio.to_thread(process_upload, data)
+    except (CoverImageError, binascii.Error, ValueError) as exc:
+        message = str(exc) if isinstance(exc, CoverImageError) else "That file isn't an image we can use."
+        raise HTTPException(422, message) from exc
+    now = datetime.now(UTC)
+    stored = db.get(PlaylistCover, playlist.id)
+    if stored is None:
+        stored = PlaylistCover(playlist_id=playlist.id, jpeg=jpeg, updated_at=now)
+    else:
+        stored.jpeg, stored.updated_at = jpeg, now
+    db.add(stored)
+    playlist.cover = {"mode": "upload", "v": int(now.timestamp())}
+    playlist.updated_at = now
+    db.add(playlist)
+    db.commit()
+    db.refresh(playlist)
+    return _to_out(playlist)
+
+
+@router.get("/{playlist_id}/cover.jpg", include_in_schema=False)
+def cover_image(playlist_id: str, db: DbSession) -> Response:
+    """An uploaded cover. Public by unguessable id so <img> tags can load it; versioned by `?v=`."""
+    stored = db.get(PlaylistCover, playlist_id)
+    if stored is None:
+        raise HTTPException(404, "No uploaded cover.")
+    return Response(
+        stored.jpeg, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=31536000, immutable"}
+    )
+
+
+def _drop_upload(db: DbSession, playlist_id: str) -> None:
+    stored = db.get(PlaylistCover, playlist_id)
+    if stored is not None:
+        db.delete(stored)
+
+
 @router.delete("/{playlist_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_playlist(playlist_id: str, user: CurrentUser, db: DbSession) -> None:
-    db.delete(_get_owned(db, user, playlist_id))
+    playlist = _get_owned(db, user, playlist_id)
+    _drop_upload(db, playlist.id)
+    db.flush()
+    db.delete(playlist)
     db.commit()
