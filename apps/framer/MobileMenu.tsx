@@ -81,7 +81,7 @@ function MobileMenuInner(props: MobileMenuProps) {
                             animate={{ clipPath: "circle(150% at calc(100% - 38px) 38px)" }}
                             exit={{ clipPath: "circle(0% at calc(100% - 38px) 38px)" }}
                             transition={{ duration: 0.6, ease: [0.76, 0, 0.24, 1] }}
-                            style={{ position: "fixed", inset: 0, zIndex: 60, background: C.ink, display: "flex", flexDirection: "column", padding: "96px 24px 32px", fontFamily: SANS }}
+                            style={{ position: "fixed", inset: 0, zIndex: 60, background: C.ink, display: "flex", flexDirection: "column", padding: "96px 24px calc(84px + env(safe-area-inset-bottom, 0px))", fontFamily: SANS }}
                         >
                             <div aria-hidden style={{ position: "absolute", width: 520, height: 520, right: -220, top: -180, borderRadius: "50%", background: `radial-gradient(closest-side, color-mix(in srgb, ${accent} 28%, transparent), transparent)`, filter: "blur(30px)" }} />
                             <button
@@ -121,7 +121,7 @@ function MobileMenuInner(props: MobileMenuProps) {
                                 {session.user ? (
                                     <>
                                         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                            <span style={{ width: 8, height: 8, borderRadius: 8, background: session.user.is_demo ? C.amber : "#1ed760" }} />
+                                            <span style={{ width: 8, height: 8, borderRadius: 8, background: session.user.is_demo || session.user.is_guest ? C.amber : "#1ed760" }} />
                                             {session.user.is_demo ? "Demo mode" : session.user.is_guest ? "Guest" : session.user.display_name}
                                         </span>
                                         <span style={{ display: "flex", gap: 16 }}>
