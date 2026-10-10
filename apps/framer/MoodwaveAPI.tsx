@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion"
-import { useEffect, useRef, useState } from "react"
+import { Component, useEffect, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 
 /**
@@ -154,12 +154,26 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     const headers: Record<string, string> = { Accept: "application/json" }
     if (init.body) headers["Content-Type"] = "application/json"
     if (token) headers.Authorization = `Bearer ${token}`
-    let res: Response
+    // A request that takes more than 4s is almost always the API waking up.
+    const slow = typeof window !== "undefined" ? window.setTimeout(() => setWarming(true), 4000) : 0
+    let res: Response | null = null
     try {
-        res = await fetch(`${API_URL}${path}`, { ...init, headers: { ...headers, ...(init.headers as Record<string, string>) } })
-    } catch {
-        throw new ApiError("Couldn’t reach Moodwave. If it’s been idle, it may be waking up — try again in a moment.", 0)
+        for (let attempt = 0; attempt < 2 && !res; attempt++) {
+            try {
+                res = await fetch(`${API_URL}${path}`, { ...init, headers: { ...headers, ...(init.headers as Record<string, string>) } })
+            } catch {
+                // Connection refused while the host spins up: wait and try once more.
+                if (attempt === 0) {
+                    setWarming(true)
+                    await new Promise((r) => setTimeout(r, 3500))
+                }
+            }
+        }
+    } finally {
+        if (slow) window.clearTimeout(slow)
+        setWarming(false)
     }
+    if (!res) throw new ApiError("Couldn’t reach Moodwave. It may still be waking up — try again in a moment.", 0)
     if (res.status === 401) {
         setToken(null)
         updateSession({ user: null })
@@ -172,6 +186,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
         } catch {
             // Non-JSON error body.
         }
+        if (res.status >= 500) reportError(`API ${res.status} on ${init.method ?? "GET"} ${path}: ${detail}`)
         throw new ApiError(detail, res.status)
     }
     if (res.status === 204) return undefined as T
@@ -196,6 +211,7 @@ function updateSession(patch: Partial<SessionState>) {
 }
 
 async function boot() {
+    wakeApi()
     // Coming back from Spotify sign-in: swap the one-time code in the fragment for a token.
     const hash = new URLSearchParams(window.location.hash.slice(1))
     const code = hash.get("mw_code")
@@ -303,6 +319,22 @@ export function go(path: string) {
     window.location.href = path
 }
 
+
+/**
+ * Ask the image CDN for a version near `px` wide instead of the full original. Framer,
+ * Deezer and Apple artwork URLs can all be resized; anything else is returned unchanged.
+ */
+export function sized(url: string | null | undefined, px: number): string {
+    if (!url) return ""
+    if (url.includes("framerusercontent.com/images/")) return `${url.split("?")[0]}?scale-down-to=${px <= 256 ? 256 : px <= 512 ? 512 : 1024}`
+    if (url.includes("dzcdn.net")) {
+        const s = px <= 250 ? 250 : px <= 500 ? 500 : 1000
+        return url.replace(/\/\d+x\d+-/, `/${s}x${s}-`)
+    }
+    if (url.includes("mzstatic.com")) return url.replace(/\/\d+x\d+bb\./, `/${px}x${px}bb.`)
+    return url
+}
+
 /** 2×2 album-art collage (falls back to a single cover or a soft gradient). */
 export function Collage({ images, size, radius = 16 }: { images: (string | null | undefined)[]; size: number | string; radius?: number }) {
     const covers = collageCovers(images)
@@ -318,14 +350,14 @@ export function Collage({ images, size, radius = 16 }: { images: (string | null 
     if (covers.length < 4) {
         return (
             <div style={box}>
-                {covers[0] ? <img src={covers[0]} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : null}
+                {covers[0] ? <img src={sized(covers[0], 512)} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : null}
             </div>
         )
     }
     return (
         <div style={{ ...box, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
             {covers.map((src) => (
-                <img key={src} src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                <img key={src} src={sized(src, 256)} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
             ))}
         </div>
     )
@@ -335,11 +367,11 @@ export function Collage({ images, size, radius = 16 }: { images: (string | null 
 
 /** Real covers used when the API is asleep or unreachable. */
 export const FALLBACK_COVERS = [
-    "https://cdn-images.dzcdn.net/images/cover/fd00ebd6d30d7253f813dba3bb1c66a9/1000x1000-000000-80-0-0.jpg",
-    "https://cdn-images.dzcdn.net/images/cover/f798a866107715dd6dc1049e498ce21f/1000x1000-000000-80-0-0.jpg",
-    "https://cdn-images.dzcdn.net/images/cover/4dff56488d13d0b5e96d93d895c9624b/1000x1000-000000-80-0-0.jpg",
-    "https://cdn-images.dzcdn.net/images/cover/d5232fcff85db84e212da2265dd70866/1000x1000-000000-80-0-0.jpg",
-    "https://cdn-images.dzcdn.net/images/cover/8f0187ad83cdd1f47f1c55420f9df227/1000x1000-000000-80-0-0.jpg",
+    "https://cdn-images.dzcdn.net/images/cover/fd00ebd6d30d7253f813dba3bb1c66a9/500x500-000000-80-0-0.jpg",
+    "https://cdn-images.dzcdn.net/images/cover/f798a866107715dd6dc1049e498ce21f/500x500-000000-80-0-0.jpg",
+    "https://cdn-images.dzcdn.net/images/cover/4dff56488d13d0b5e96d93d895c9624b/500x500-000000-80-0-0.jpg",
+    "https://cdn-images.dzcdn.net/images/cover/d5232fcff85db84e212da2265dd70866/500x500-000000-80-0-0.jpg",
+    "https://cdn-images.dzcdn.net/images/cover/8f0187ad83cdd1f47f1c55420f9df227/500x500-000000-80-0-0.jpg",
     "https://is1-ssl.mzstatic.com/image/thumb/Music113/v4/12/9c/4d/129c4dd1-3ba4-05bd-487d-c4eb1e0eec89/27485.jpg/600x600bb.jpg",
 ]
 
@@ -790,4 +822,96 @@ export function PlayerDock({ accent = C.lilac, bottom = 16 }: { accent?: string;
         </AnimatePresence>,
         document.body,
     )
+}
+
+// --- Error reporting -----------------------------------------------------------------------
+// Crashes go to the API's built-in log (POST /telemetry/error), visible on /errors.
+
+const reported = new Set<string>()
+let reportsThisLoad = 0
+
+export function reportError(message: string, stack = "") {
+    if (typeof window === "undefined" || !message) return
+    const key = message.slice(0, 200)
+    if (reported.has(key) || reportsThisLoad >= 10) return
+    reported.add(key)
+    reportsThisLoad++
+    try {
+        void fetch(`${API_URL}/telemetry/error`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ message: message.slice(0, 1000), stack: stack.slice(0, 4000), page: window.location.pathname + window.location.search }),
+            keepalive: true,
+        }).catch(() => undefined)
+    } catch {
+        // Reporting must never break the page.
+    }
+}
+
+let handlersInstalled = false
+function installErrorHandlers() {
+    if (handlersInstalled || typeof window === "undefined") return
+    handlersInstalled = true
+    window.addEventListener("error", (e) => {
+        // Third-party scripts (analytics, Spotify embed) report as "Script error." — skip those.
+        if (!e.message || e.message === "Script error.") return
+        reportError(e.message, e.error?.stack ?? `${e.filename}:${e.lineno}:${e.colno}`)
+    })
+    window.addEventListener("unhandledrejection", (e) => {
+        const reason = e.reason as { message?: string; stack?: string } | string | undefined
+        const message = typeof reason === "string" ? reason : reason?.message
+        if (message && !/Couldn’t reach Moodwave/.test(message)) reportError(`Unhandled promise: ${message}`, typeof reason === "object" ? reason?.stack ?? "" : "")
+    })
+}
+installErrorHandlers()
+
+/** Error boundary for code components: report the crash, render nothing instead of a broken box. */
+export class Safe extends Component<{ name: string; children?: ReactNode }, { failed: boolean }> {
+    state = { failed: false }
+    static getDerivedStateFromError() {
+        return { failed: true }
+    }
+    componentDidCatch(error: Error) {
+        reportError(`[${this.props.name}] ${error.message}`, error.stack ?? "")
+    }
+    render() {
+        return this.state.failed ? null : this.props.children
+    }
+}
+
+// --- "Warming up" -------------------------------------------------------------------------
+// The API sleeps when idle (free hosting). A slow request flips this so the UI can say
+// "waking up" instead of looking stuck.
+
+let warming = false
+const warmingListeners = new Set<(w: boolean) => void>()
+function setWarming(value: boolean) {
+    if (warming === value) return
+    warming = value
+    warmingListeners.forEach((fn) => fn(value))
+}
+
+export function useWarming(): boolean {
+    const [state, setState] = useState(warming)
+    useEffect(() => {
+        warmingListeners.add(setState)
+        return () => {
+            warmingListeners.delete(setState)
+        }
+    }, [])
+    return state
+}
+
+let pinged = false
+/** Wake the API as early as possible (first page load), without blocking anything. */
+export function wakeApi() {
+    if (pinged || typeof window === "undefined") return
+    pinged = true
+    const slow = window.setTimeout(() => setWarming(true), 4000)
+    fetch(`${API_URL}/health`)
+        .catch(() => undefined)
+        .finally(() => {
+            window.clearTimeout(slow)
+            setWarming(false)
+        })
 }

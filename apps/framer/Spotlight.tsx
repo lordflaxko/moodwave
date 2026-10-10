@@ -2,7 +2,7 @@ import { addPropertyControls, ControlType, useIsStaticRenderer } from "framer"
 import { motion, useMotionTemplate, useMotionValue, useReducedMotion, useSpring } from "framer-motion"
 import { useEffect, useRef, type CSSProperties } from "react"
 
-import { C, useFinePointer } from "./MoodwaveAPI.tsx"
+import { C, useFinePointer, Safe } from "./MoodwaveAPI.tsx"
 
 /**
  * A soft light that follows the pointer across the hero's portrait wall, lifting the
@@ -16,14 +16,7 @@ interface SpotlightProps {
     style?: CSSProperties
 }
 
-/**
- * @framerIntrinsicWidth 1200
- * @framerIntrinsicHeight 800
- *
- * @framerSupportedLayoutWidth fixed
- * @framerSupportedLayoutHeight fixed
- */
-export default function Spotlight(props: SpotlightProps) {
+function SpotlightInner(props: SpotlightProps) {
     const { accent = C.lilac, radius = 340, strength = 0.22 } = props
     const isStatic = useIsStaticRenderer()
     const reduced = useReducedMotion()
@@ -68,6 +61,21 @@ export default function Spotlight(props: SpotlightProps) {
             <motion.div style={{ position: "absolute", inset: 0, background: glow, mixBlendMode: "screen" }} />
             <motion.div style={{ position: "absolute", inset: 0, background: lift, mixBlendMode: "soft-light" }} />
         </div>
+    )
+}
+
+/**
+ * @framerIntrinsicWidth 1200
+ * @framerIntrinsicHeight 800
+ *
+ * @framerSupportedLayoutWidth fixed
+ * @framerSupportedLayoutHeight fixed
+ */
+export default function Spotlight(props: SpotlightProps) {
+    return (
+        <Safe name="Spotlight">
+            <SpotlightInner {...props} />
+        </Safe>
     )
 }
 

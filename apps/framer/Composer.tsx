@@ -8,6 +8,8 @@ import {
     type CSSProperties,
 } from "react"
 
+import { Safe } from "./MoodwaveAPI.tsx"
+
 /** Accent at an opacity; works for hex, rgb() or hsl() values from the colour control. */
 const mix = (color: string, amount: string) => `color-mix(in srgb, ${color} ${amount}, transparent)`
 
@@ -185,14 +187,7 @@ function LengthField({ value, onChange, pill }: { value: number; onChange: (n: n
     )
 }
 
-/**
- * @framerIntrinsicWidth 680
- * @framerIntrinsicHeight 230
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight auto
- */
-export default function Composer(props: ComposerProps) {
+function ComposerInner(props: ComposerProps) {
     const {
         target = "/create",
         placeholderLead = "Music for",
@@ -448,6 +443,21 @@ export default function Composer(props: ComposerProps) {
                 </div>
             </div>
         </motion.form>
+    )
+}
+
+/**
+ * @framerIntrinsicWidth 680
+ * @framerIntrinsicHeight 230
+ *
+ * @framerSupportedLayoutWidth any-prefer-fixed
+ * @framerSupportedLayoutHeight auto
+ */
+export default function Composer(props: ComposerProps) {
+    return (
+        <Safe name="Composer">
+            <ComposerInner {...props} />
+        </Safe>
     )
 }
 

@@ -21,6 +21,7 @@ import {
     useSession,
     type Playlist,
     type Track,
+    Safe,
 } from "./MoodwaveAPI.tsx"
 
 /** Accent at an opacity; works for hex, rgb() or hsl() values from the colour control. */
@@ -140,14 +141,7 @@ function Skeleton({ narrow }: { narrow: boolean }) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 1120
- * @framerIntrinsicHeight 900
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight auto
- */
-export default function PlaylistView(props: PlaylistViewProps) {
+function PlaylistViewInner(props: PlaylistViewProps) {
     const { libraryPath = "/library", createPath = "/create", accent = C.lilac } = props
     const isStatic = useIsStaticRenderer()
     const session = useSession(!isStatic)
@@ -455,7 +449,7 @@ export default function PlaylistView(props: PlaylistViewProps) {
                                     {active && player.playing ? <Equalizer color={accent} /> : active ? <span style={{ color: accent }}>▶</span> : hovered === t.id && playable ? <span style={{ color: C.text }}>▶</span> : String(i + 1).padStart(2, "0")}
                                 </span>
                                 {t.image_url ? (
-                                    <img src={t.image_url} alt="" width={narrow ? 44 : 48} height={narrow ? 44 : 48} style={{ borderRadius: 8, objectFit: "cover", display: "block" }} />
+                                    <img src={t.image_url} alt="" loading="lazy" decoding="async" width={narrow ? 44 : 48} height={narrow ? 44 : 48} style={{ borderRadius: 8, objectFit: "cover", display: "block" }} />
                                 ) : (
                                     <span style={{ width: narrow ? 44 : 48, height: narrow ? 44 : 48, borderRadius: 8, background: C.surface3 }} />
                                 )}
@@ -566,6 +560,21 @@ export default function PlaylistView(props: PlaylistViewProps) {
                   )
                 : null}
         </div>
+    )
+}
+
+/**
+ * @framerIntrinsicWidth 1120
+ * @framerIntrinsicHeight 900
+ *
+ * @framerSupportedLayoutWidth any-prefer-fixed
+ * @framerSupportedLayoutHeight auto
+ */
+export default function PlaylistView(props: PlaylistViewProps) {
+    return (
+        <Safe name="PlaylistView">
+            <PlaylistViewInner {...props} />
+        </Safe>
     )
 }
 

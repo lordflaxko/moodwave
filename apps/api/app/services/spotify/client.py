@@ -28,6 +28,15 @@ def _escape(value: str) -> str:
     return value.replace('"', "").strip()
 
 
+def _pick_image(images: list[dict[str, Any]], target: int) -> str | None:
+    """The smallest album image at least `target` px wide (Spotify sends 640, 300 and 64)."""
+    sized = sorted((img for img in images if img.get("url")), key=lambda img: img.get("width") or 0)
+    for img in sized:
+        if (img.get("width") or 0) >= target:
+            return img["url"]
+    return sized[-1]["url"] if sized else None
+
+
 def parse_track(item: dict[str, Any], reason: str | None = None, energy: float | None = None) -> Track:
     album = item.get("album") or {}
     images = album.get("images") or []
@@ -39,7 +48,8 @@ def parse_track(item: dict[str, Any], reason: str | None = None, energy: float |
         artists=[a.get("name", "") for a in item.get("artists", [])] or ["Unknown"],
         artist_ids=[a.get("id", "") for a in item.get("artists", []) if a.get("id")],
         album=album.get("name", ""),
-        image_url=images[0]["url"] if images else None,
+        image_url=_pick_image(images, 300),
+        image_large=_pick_image(images, 600),
         duration_ms=item.get("duration_ms", 0),
         explicit=bool(item.get("explicit")),
         popularity=item.get("popularity"),

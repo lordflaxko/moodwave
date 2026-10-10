@@ -2,7 +2,7 @@ import { addPropertyControls, ControlType, useIsStaticRenderer } from "framer"
 import { motion } from "framer-motion"
 import { useEffect, useState, type CSSProperties } from "react"
 
-import { C, PlayerDock, requestPlay, usePlayer } from "./MoodwaveAPI.tsx"
+import { C, PlayerDock, requestPlay, usePlayer, Safe } from "./MoodwaveAPI.tsx"
 
 /**
  * Makes a CMS track row playable. Placed over the row (absolute, full size), it is an
@@ -41,14 +41,7 @@ function Bars({ color, playing }: { color: string; playing: boolean }) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 400
- * @framerIntrinsicHeight 60
- *
- * @framerSupportedLayoutWidth any
- * @framerSupportedLayoutHeight any
- */
-export default function TrackPlay(props: TrackPlayProps) {
+function TrackPlayInner(props: TrackPlayProps) {
     const { spotifyId = "", title = "Track", artist = "", accent = C.lilac, indicatorRight = 52 } = props
     const isStatic = useIsStaticRenderer()
     const state = usePlayer()
@@ -105,6 +98,21 @@ export default function TrackPlay(props: TrackPlayProps) {
             </button>
             {owner ? <PlayerDock accent={accent} /> : null}
         </>
+    )
+}
+
+/**
+ * @framerIntrinsicWidth 400
+ * @framerIntrinsicHeight 60
+ *
+ * @framerSupportedLayoutWidth any
+ * @framerSupportedLayoutHeight any
+ */
+export default function TrackPlay(props: TrackPlayProps) {
+    return (
+        <Safe name="TrackPlay">
+            <TrackPlayInner {...props} />
+        </Safe>
     )
 }
 

@@ -2,7 +2,7 @@ import { addPropertyControls, ControlType, useIsStaticRenderer } from "framer"
 import { motion, useMotionValueEvent, useReducedMotion, useScroll, useTransform } from "framer-motion"
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
 
-import { C, EASE, FALLBACK_COVERS, MONO, SANS, SERIF } from "./MoodwaveAPI.tsx"
+import { C, EASE, FALLBACK_COVERS, MONO, SANS, SERIF, sized, Safe } from "./MoodwaveAPI.tsx"
 
 /**
  * "How it flows", told by scrolling: the stage stays pinned while four steps play out
@@ -171,7 +171,7 @@ function Playlist({ accent }: { accent: string }) {
                     style={{ width: 84, height: 84, borderRadius: 14, overflow: "hidden", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2, flexShrink: 0, boxShadow: "0 16px 40px -16px rgba(0,0,0,0.9)" }}
                 >
                     {FALLBACK_COVERS.slice(0, 4).map((src: string) => (
-                        <img key={src} src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                        <img key={src} src={sized(src, 128)} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
                     ))}
                 </motion.div>
                 <div>
@@ -229,14 +229,7 @@ function Visual({ step, accent }: { step: number; accent: string }) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 1120
- * @framerIntrinsicHeight 900
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight auto
- */
-export default function FlowStory(props: FlowStoryProps) {
+function FlowStoryInner(props: FlowStoryProps) {
     const { accent = C.lilac, eyebrow: kicker = "03 — How it flows", heading = "From a line to a record." } = props
     const isStatic = useIsStaticRenderer()
     const reduced = useReducedMotion()
@@ -351,6 +344,21 @@ export default function FlowStory(props: FlowStoryProps) {
                 </div>
             </div>
         </div>
+    )
+}
+
+/**
+ * @framerIntrinsicWidth 1120
+ * @framerIntrinsicHeight 900
+ *
+ * @framerSupportedLayoutWidth any-prefer-fixed
+ * @framerSupportedLayoutHeight auto
+ */
+export default function FlowStory(props: FlowStoryProps) {
+    return (
+        <Safe name="FlowStory">
+            <FlowStoryInner {...props} />
+        </Safe>
     )
 }
 

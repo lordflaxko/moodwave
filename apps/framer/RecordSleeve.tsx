@@ -1,7 +1,7 @@
 import { addPropertyControls, ControlType } from "framer"
 import type { CSSProperties } from "react"
 
-import { C } from "./MoodwaveAPI.tsx"
+import { C, sized, Safe } from "./MoodwaveAPI.tsx"
 
 /**
  * The record inside an artist card's "sleeve". It sits behind the card and slides up and out
@@ -15,14 +15,7 @@ interface RecordSleeveProps {
     style?: CSSProperties
 }
 
-/**
- * @framerIntrinsicWidth 170
- * @framerIntrinsicHeight 170
- *
- * @framerSupportedLayoutWidth fixed
- * @framerSupportedLayoutHeight fixed
- */
-export default function RecordSleeve(props: RecordSleeveProps) {
+function RecordSleeveInner(props: RecordSleeveProps) {
     const { cover, accent = C.lilac } = props
     return (
         <div aria-hidden style={{ position: "relative", ...props.style, pointerEvents: "none" }}>
@@ -43,11 +36,26 @@ export default function RecordSleeve(props: RecordSleeveProps) {
                 }}
             >
                 <div style={{ position: "relative", width: "36%", height: "36%", borderRadius: "50%", overflow: "hidden", background: accent, boxShadow: "0 0 0 4px #0b0a0d" }}>
-                    {cover?.src ? <img src={cover.src} srcSet={cover.srcSet} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : null}
+                    {cover?.src ? <img src={sized(cover.src, 128)} alt="" loading="lazy" decoding="async" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : null}
                     <span style={{ position: "absolute", left: "50%", top: "50%", width: 6, height: 6, margin: -3, borderRadius: 6, background: C.ink }} />
                 </div>
             </div>
         </div>
+    )
+}
+
+/**
+ * @framerIntrinsicWidth 170
+ * @framerIntrinsicHeight 170
+ *
+ * @framerSupportedLayoutWidth fixed
+ * @framerSupportedLayoutHeight fixed
+ */
+export default function RecordSleeve(props: RecordSleeveProps) {
+    return (
+        <Safe name="RecordSleeve">
+            <RecordSleeveInner {...props} />
+        </Safe>
     )
 }
 

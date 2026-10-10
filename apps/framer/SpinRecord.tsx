@@ -2,7 +2,7 @@ import { addPropertyControls, ControlType, useIsStaticRenderer } from "framer"
 import { AnimatePresence, motion, useMotionValue, useReducedMotion } from "framer-motion"
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react"
 
-import { C, EASE, MONO, needleDrop, SANS, scratch, SERIF, SoundToggle, spinTone, stopSpinTone } from "./MoodwaveAPI.tsx"
+import { C, EASE, MONO, needleDrop, sized, SANS, scratch, SERIF, SoundToggle, spinTone, stopSpinTone, Safe } from "./MoodwaveAPI.tsx"
 
 /**
  * "Can't decide?" — a record you can grab, scratch and fling. When it stops, the tonearm
@@ -53,14 +53,7 @@ function useWidth() {
 
 const mod = (a: number, n: number) => ((a % n) + n) % n
 
-/**
- * @framerIntrinsicWidth 1120
- * @framerIntrinsicHeight 560
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight auto
- */
-export default function SpinRecord(props: SpinRecordProps) {
+function SpinRecordInner(props: SpinRecordProps) {
     const { moods: rawMoods, eyebrow = "05 — Can’t decide?", heading = "Spin the record.", createPath = "/create", accent = C.lilac } = props
     const moods = rawMoods?.length ? rawMoods : DEFAULT_MOODS
     const isStatic = useIsStaticRenderer()
@@ -229,7 +222,9 @@ export default function SpinRecord(props: SpinRecordProps) {
                     return (
                         <div key={m.label} aria-hidden style={{ position: "absolute", left: "50%", top: "50%", width: 0, height: 0, transform: `rotate(${angle}deg) translateX(${r}px)` }}>
                             <img
-                                src={m.cover}
+                                src={sized(m.cover, 128)}
+                                loading="lazy"
+                                decoding="async"
                                 alt=""
                                 draggable={false}
                                 style={{ position: "absolute", width: size * 0.13, height: size * 0.13, marginLeft: -(size * 0.065), marginTop: -(size * 0.065), borderRadius: 8, objectFit: "cover", transform: "rotate(90deg)", boxShadow: active ? `0 0 0 2px ${accent}` : "0 6px 16px -6px rgba(0,0,0,0.9)", opacity: landed === null || active ? 1 : 0.35, transition: "opacity 0.4s ease, box-shadow 0.4s ease", pointerEvents: "none" }}
@@ -316,6 +311,21 @@ export default function SpinRecord(props: SpinRecordProps) {
                 </div>
             </div>
         </div>
+    )
+}
+
+/**
+ * @framerIntrinsicWidth 1120
+ * @framerIntrinsicHeight 560
+ *
+ * @framerSupportedLayoutWidth any-prefer-fixed
+ * @framerSupportedLayoutHeight auto
+ */
+export default function SpinRecord(props: SpinRecordProps) {
+    return (
+        <Safe name="SpinRecord">
+            <SpinRecordInner {...props} />
+        </Safe>
     )
 }
 

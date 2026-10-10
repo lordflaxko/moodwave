@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { useEffect, useState, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
 
-import { C, EASE, MONO, SANS, SERIF, signIn, signOut, useSession } from "./MoodwaveAPI.tsx"
+import { C, EASE, MONO, SANS, SERIF, signIn, signOut, useSession, Safe } from "./MoodwaveAPI.tsx"
 
 /** Phone navigation: a burger that opens a full-screen sheet of large, staggered links. */
 
@@ -19,14 +19,7 @@ const LINKS = [
     { href: "/", label: "Home", note: "Start again" },
 ]
 
-/**
- * @framerIntrinsicWidth 44
- * @framerIntrinsicHeight 44
- *
- * @framerSupportedLayoutWidth fixed
- * @framerSupportedLayoutHeight fixed
- */
-export default function MobileMenu(props: MobileMenuProps) {
+function MobileMenuInner(props: MobileMenuProps) {
     const { accent = C.lilac } = props
     const isStatic = useIsStaticRenderer()
     const session = useSession(!isStatic)
@@ -144,6 +137,21 @@ export default function MobileMenu(props: MobileMenuProps) {
                 document.body,
             )}
         </div>
+    )
+}
+
+/**
+ * @framerIntrinsicWidth 44
+ * @framerIntrinsicHeight 44
+ *
+ * @framerSupportedLayoutWidth fixed
+ * @framerSupportedLayoutHeight fixed
+ */
+export default function MobileMenu(props: MobileMenuProps) {
+    return (
+        <Safe name="MobileMenu">
+            <MobileMenuInner {...props} />
+        </Safe>
     )
 }
 

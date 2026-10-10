@@ -2,7 +2,7 @@ import { addPropertyControls, ControlType, useIsStaticRenderer } from "framer"
 import { motion, useMotionValue, useReducedMotion, useSpring } from "framer-motion"
 import { useEffect, useState, type CSSProperties } from "react"
 
-import { C, MONO, useFinePointer } from "./MoodwaveAPI.tsx"
+import { C, MONO, useFinePointer, Safe } from "./MoodwaveAPI.tsx"
 
 /**
  * A soft ring that trails the pointer and swells over anything clickable. The system
@@ -16,14 +16,7 @@ interface CursorProps {
 
 type Mode = "idle" | "link" | "text"
 
-/**
- * @framerIntrinsicWidth 40
- * @framerIntrinsicHeight 40
- *
- * @framerSupportedLayoutWidth fixed
- * @framerSupportedLayoutHeight fixed
- */
-export default function Cursor(props: CursorProps) {
+function CursorInner(props: CursorProps) {
     const { accent = C.lilac } = props
     const isStatic = useIsStaticRenderer()
     const reduced = useReducedMotion()
@@ -103,6 +96,21 @@ export default function Cursor(props: CursorProps) {
                 {label ? <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: C.ink }}>{label}</span> : null}
             </motion.div>
         </motion.div>
+    )
+}
+
+/**
+ * @framerIntrinsicWidth 40
+ * @framerIntrinsicHeight 40
+ *
+ * @framerSupportedLayoutWidth fixed
+ * @framerSupportedLayoutHeight fixed
+ */
+export default function Cursor(props: CursorProps) {
+    return (
+        <Safe name="Cursor">
+            <CursorInner {...props} />
+        </Safe>
     )
 }
 

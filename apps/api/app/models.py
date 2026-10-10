@@ -78,3 +78,16 @@ class RefinementTurn(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_now)
 
     playlist: Playlist | None = Relationship(back_populates="refinements")
+
+
+class ClientError(SQLModel, table=True):
+    """Errors from the site (front-end crashes) and the API (unhandled exceptions)."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    created_at: datetime = Field(default_factory=_now, index=True)
+    source: str = Field(default="web", description="web | api")
+    page: str = ""
+    message: str
+    stack: str = ""
+    user_agent: str = ""
+    user_id: str | None = Field(default=None, index=True)

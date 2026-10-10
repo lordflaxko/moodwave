@@ -2,6 +2,8 @@ import { addPropertyControls, ControlType, useIsStaticRenderer } from "framer"
 import { useReducedMotion } from "framer-motion"
 import type { CSSProperties } from "react"
 
+import { Safe } from "./MoodwaveAPI.tsx"
+
 /** Film grain over the whole site: SVG noise, jittered in steps so it reads as texture, not motion. */
 
 interface GrainProps {
@@ -15,14 +17,7 @@ const NOISE = encodeURIComponent(
 
 const KEYFRAMES = `@keyframes mw-grain{0%{transform:translate(0,0)}17%{transform:translate(-4%,-6%)}33%{transform:translate(5%,3%)}50%{transform:translate(-6%,5%)}67%{transform:translate(4%,-4%)}83%{transform:translate(-2%,6%)}100%{transform:translate(0,0)}}`
 
-/**
- * @framerIntrinsicWidth 120
- * @framerIntrinsicHeight 40
- *
- * @framerSupportedLayoutWidth fixed
- * @framerSupportedLayoutHeight fixed
- */
-export default function Grain(props: GrainProps) {
+function GrainInner(props: GrainProps) {
     const { opacity = 0.05 } = props
     const isStatic = useIsStaticRenderer()
     const reduced = useReducedMotion()
@@ -40,6 +35,21 @@ export default function Grain(props: GrainProps) {
                 }}
             />
         </div>
+    )
+}
+
+/**
+ * @framerIntrinsicWidth 120
+ * @framerIntrinsicHeight 40
+ *
+ * @framerSupportedLayoutWidth fixed
+ * @framerSupportedLayoutHeight fixed
+ */
+export default function Grain(props: GrainProps) {
+    return (
+        <Safe name="Grain">
+            <GrainInner {...props} />
+        </Safe>
     )
 }
 

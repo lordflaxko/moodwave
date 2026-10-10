@@ -2,7 +2,7 @@ import { addPropertyControls, ControlType, useIsStaticRenderer } from "framer"
 import { AnimatePresence, motion } from "framer-motion"
 import { useEffect, useRef, useState, type CSSProperties } from "react"
 
-import { C, EASE, SANS, signIn, signOut, useSession } from "./MoodwaveAPI.tsx"
+import { C, EASE, SANS, signIn, signOut, useSession, Safe } from "./MoodwaveAPI.tsx"
 
 /** Nav status pill: "Connect Spotify" when signed out, the account (with sign-out) when in. */
 
@@ -39,11 +39,7 @@ function Dot({ color, pulse }: { color: string; pulse?: boolean }) {
     )
 }
 
-/**
- * @framerSupportedLayoutWidth auto
- * @framerSupportedLayoutHeight auto
- */
-export default function AccountChip(props: AccountChipProps) {
+function AccountChipInner(props: AccountChipProps) {
     const isStatic = useIsStaticRenderer()
     const session = useSession(!isStatic)
     const [open, setOpen] = useState(false)
@@ -130,6 +126,18 @@ export default function AccountChip(props: AccountChipProps) {
                 ) : null}
             </AnimatePresence>
         </div>
+    )
+}
+
+/**
+ * @framerSupportedLayoutWidth auto
+ * @framerSupportedLayoutHeight auto
+ */
+export default function AccountChip(props: AccountChipProps) {
+    return (
+        <Safe name="AccountChip">
+            <AccountChipInner {...props} />
+        </Safe>
     )
 }
 

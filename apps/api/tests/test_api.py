@@ -157,3 +157,58 @@ def test_login_only_returns_to_allowed_origins(client):
         assert bad.status_code == 400
     finally:
         settings.spotify_client_id, settings.spotify_client_secret, settings.extra_origins = saved
+
+
+def test_error_reports_are_logged_and_rate_limited(client):
+    client.cookies.clear()
+    ok = client.post("/telemetry/error", json={"message": "TypeError: boom", "stack": "at x", "page": "/create"})
+    assert ok.status_code == 204
+    statuses = [client.post("/telemetry/error", json={"message": f"e{i}"}).status_code for i in range(25)]
+    assert 429 in statuses
+
+
+def test_error_log_is_private(client, demo_client):
+    # Signed out → 401; demo sessions can't read it either.
+    client.cookies.clear()
+    assert client.get("/telemetry/errors").status_code == 401
+    demo_client.post("/auth/demo")
+    assert demo_client.get("/telemetry/errors").status_code == 403
+
+
+def test_error_log_groups_for_owner(client):
+    from sqlmodel import Session
+
+    from app.core.security import sign_session
+    from app.db import engine
+    from app.models import User
+    from app.routers.telemetry import record_error
+
+    with Session(engine) as db:
+        owner = User(display_name="Owner", spotify_id="owner-1")
+        db.add(owner)
+        db.commit()
+        db.refresh(owner)
+        for _ in range(3):
+            record_error(db, source="web", message="Grouped failure")
+        record_error(db, source="api", message="Other failure")
+        token = sign_session(owner.id)
+
+    groups = client.get("/telemetry/errors", headers={"Authorization": f"Bearer {token}"}).json()
+    by_message = {g["message"]: g for g in groups}
+    assert by_message["Grouped failure"]["count"] == 3
+    assert by_message["Other failure"]["source"] == "api"
+
+
+def test_missing_columns_are_added(tmp_path):
+    from sqlalchemy import inspect, text
+    from sqlmodel import create_engine
+
+    from app.db import add_missing_columns
+
+    eng = create_engine(f"sqlite:///{tmp_path / 'old.db'}")
+    with eng.begin() as conn:  # an old, narrower version of the error table
+        conn.execute(text("CREATE TABLE clienterror (id INTEGER PRIMARY KEY, message VARCHAR NOT NULL)"))
+    added = add_missing_columns(eng)
+    assert "clienterror.page" in added and "clienterror.source" in added
+    assert {"page", "source", "stack"} <= {c["name"] for c in inspect(eng).get_columns("clienterror")}
+    assert add_missing_columns(eng) == []  # idempotent

@@ -23,6 +23,8 @@ class Track(BaseModel):
     artist_images: list[str | None] = Field(default_factory=list, description="Portrait per artist, same order")
     album: str
     image_url: str | None = None
+    # Bigger artwork (~640px) for large collages; `image_url` is the ~300px thumbnail.
+    image_large: str | None = None
     duration_ms: int
     explicit: bool = False
     popularity: int | None = None

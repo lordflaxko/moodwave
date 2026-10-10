@@ -1,15 +1,18 @@
 """Moodwave API entrypoint."""
 
 import logging
+import traceback
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlmodel import Session
 
 from app.core.config import get_settings
-from app.db import init_db
-from app.routers import auth, catalog, playlists, spotify
+from app.db import engine, init_db
+from app.routers import auth, catalog, playlists, spotify, telemetry
+from app.routers.telemetry import record_error
 from app.services.ai.base import AIError
 from app.services.spotify.base import SpotifyError
 
@@ -55,6 +58,25 @@ async def lookup_error_handler(_: Request, exc: LookupError) -> JSONResponse:
     return JSONResponse({"detail": str(exc)}, status_code=404)
 
 
+@app.exception_handler(Exception)
+async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Record anything unexpected in the built-in error log, then answer with a clean 500."""
+    logging.getLogger("moodwave").exception("Unhandled error on %s %s", request.method, request.url.path)
+    try:
+        with Session(engine) as db:
+            record_error(
+                db,
+                source="api",
+                message=f"{type(exc).__name__}: {exc}"[:1000],
+                stack="".join(traceback.format_exception(exc))[-4000:],
+                page=f"{request.method} {request.url.path}",
+                user_agent=request.headers.get("user-agent", ""),
+            )
+    except Exception:  # noqa: BLE001 - logging must never mask the original error
+        logging.getLogger("moodwave").warning("Could not record error", exc_info=True)
+    return JSONResponse({"detail": "Something went wrong on our side. It's been logged."}, status_code=500)
+
+
 @app.get("/health", tags=["meta"])
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -64,3 +86,4 @@ app.include_router(auth.router)
 app.include_router(playlists.router)
 app.include_router(spotify.router)
 app.include_router(catalog.router)
+app.include_router(telemetry.router)

@@ -11,11 +11,13 @@ import {
     readSpectrum,
     SANS,
     SERIF,
+    sized,
     SoundToggle,
     stopPad,
     useFeaturedTracks,
     useSound,
     type FeaturedTrack,
+    Safe,
 } from "./MoodwaveAPI.tsx"
 
 /**
@@ -124,14 +126,7 @@ function nearest(tracks: FeaturedTrack[], energy: number, count: number): Featur
         .slice(0, count)
 }
 
-/**
- * @framerIntrinsicWidth 1120
- * @framerIntrinsicHeight 560
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight auto
- */
-export default function EnergyMixer(props: EnergyMixerProps) {
+function EnergyMixerInner(props: EnergyMixerProps) {
     const {
         eyebrow = "03 — Find your energy",
         heading = "Slide it until it feels right.",
@@ -264,7 +259,7 @@ export default function EnergyMixer(props: EnergyMixerProps) {
                                 {t?.image_url ? (
                                     <motion.img
                                         key={t.image_url}
-                                        src={t.image_url}
+                                        src={sized(t.image_url, 320)}
                                         alt=""
                                         initial={{ opacity: 0, scale: 1.08 }}
                                         animate={{ opacity: 1, scale: 1 }}
@@ -300,6 +295,21 @@ export default function EnergyMixer(props: EnergyMixerProps) {
                 {panel}
             </div>
         </div>
+    )
+}
+
+/**
+ * @framerIntrinsicWidth 1120
+ * @framerIntrinsicHeight 560
+ *
+ * @framerSupportedLayoutWidth any-prefer-fixed
+ * @framerSupportedLayoutHeight auto
+ */
+export default function EnergyMixer(props: EnergyMixerProps) {
+    return (
+        <Safe name="EnergyMixer">
+            <EnergyMixerInner {...props} />
+        </Safe>
     )
 }
 

@@ -11,11 +11,14 @@ import {
     SANS,
     SERIF,
     signIn,
+    sized,
     startDemo,
     useFeaturedCovers,
     useSession,
+    useWarming,
     type GenerateInput,
     type Playlist,
+    Safe,
 } from "./MoodwaveAPI.tsx"
 
 /** Accent at an opacity; works for hex, rgb() or hsl() values from the colour control. */
@@ -83,7 +86,7 @@ function CoverOrbit({ covers, reduced }: { covers: string[]; reduced: boolean })
                 return (
                     <motion.img
                         key={src}
-                        src={src}
+                        src={sized(src, 256)}
                         alt=""
                         initial={{ opacity: 0, scale: 0.6 }}
                         animate={reduced ? { opacity: 0.28, scale: 1 } : { opacity: [0.18, 0.42, 0.18], scale: 1, rotate: -360 }}
@@ -115,6 +118,7 @@ function CoverOrbit({ covers, reduced }: { covers: string[]; reduced: boolean })
 function Overlay({ prompt, accent, length }: { prompt: string; accent: string; length: number }) {
     const reduced = Boolean(useReducedMotion())
     const covers = useFeaturedCovers(10)
+    const warming = useWarming()
     const [step, setStep] = useState(0)
     const [elapsed, setElapsed] = useState(0)
     // A rough estimate so the line keeps moving; it never claims to finish early.
@@ -210,6 +214,9 @@ function Overlay({ prompt, accent, length }: { prompt: string; accent: string; l
                 <div style={{ width: 220, height: 2, borderRadius: 2, background: C.line2, margin: "20px auto 0", overflow: "hidden" }}>
                     <div style={{ height: "100%", width: `${progress * 100}%`, background: accent, transition: "width 0.2s linear" }} />
                 </div>
+                {warming ? (
+                    <p style={{ fontFamily: SANS, fontSize: 13, color: C.subtle, margin: "14px 0 0" }}>Waking up the studio… the first request after a quiet spell takes a moment.</p>
+                ) : null}
                 {length > 40 ? (
                     <p style={{ fontFamily: SANS, fontSize: 13, color: C.faint, margin: "14px 0 0" }}>
                         {length} songs is a big one — this can take a minute or two.
@@ -263,14 +270,7 @@ const ghostButton: CSSProperties = {
     cursor: "pointer",
 }
 
-/**
- * @framerIntrinsicWidth 600
- * @framerIntrinsicHeight 120
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight auto
- */
-export default function Studio(props: StudioProps) {
+function StudioInner(props: StudioProps) {
     const { playlistPath = "/playlist", accent = C.lilac } = props
     const isStatic = useIsStaticRenderer()
     const sessionState = useSession(!isStatic)
@@ -372,6 +372,21 @@ export default function Studio(props: StudioProps) {
                 ) : null}
             </AnimatePresence>
         </div>
+    )
+}
+
+/**
+ * @framerIntrinsicWidth 600
+ * @framerIntrinsicHeight 120
+ *
+ * @framerSupportedLayoutWidth any-prefer-fixed
+ * @framerSupportedLayoutHeight auto
+ */
+export default function Studio(props: StudioProps) {
+    return (
+        <Safe name="Studio">
+            <StudioInner {...props} />
+        </Safe>
     )
 }
 

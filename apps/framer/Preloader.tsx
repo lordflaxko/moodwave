@@ -2,7 +2,7 @@ import { addPropertyControls, ControlType, useIsStaticRenderer } from "framer"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { useEffect, useRef, useState, type CSSProperties } from "react"
 
-import { C, EASE, FALLBACK_COVERS, MONO, SERIF } from "./MoodwaveAPI.tsx"
+import { C, EASE, FALLBACK_COVERS, MONO, SERIF, sized, Safe } from "./MoodwaveAPI.tsx"
 
 /**
  * Welcome loader: a record spins up (its label cycling through real covers), the tonearm
@@ -79,7 +79,7 @@ function Record({ covers, accent, spinning }: { covers: string[]; accent: string
                     <AnimatePresence initial={false}>
                         <motion.img
                             key={covers[index]}
-                            src={covers[index]}
+                            src={sized(covers[index], 256)}
                             alt=""
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -111,14 +111,7 @@ function Record({ covers, accent, spinning }: { covers: string[]; accent: string
     )
 }
 
-/**
- * @framerIntrinsicWidth 200
- * @framerIntrinsicHeight 40
- *
- * @framerSupportedLayoutWidth fixed
- * @framerSupportedLayoutHeight fixed
- */
-export default function Preloader(props: PreloaderProps) {
+function PreloaderInner(props: PreloaderProps) {
     const { covers = FALLBACK_COVERS.slice(0, 4), accent = C.lilac, minDuration = 1.5 } = props
     const isStatic = useIsStaticRenderer()
     const reduced = useReducedMotion()
@@ -222,6 +215,21 @@ export default function Preloader(props: PreloaderProps) {
                 <div style={{ height: "100%", width: `${percent}%`, background: accent, transition: "width 0.1s linear" }} />
             </div>
         </motion.div>
+    )
+}
+
+/**
+ * @framerIntrinsicWidth 200
+ * @framerIntrinsicHeight 40
+ *
+ * @framerSupportedLayoutWidth fixed
+ * @framerSupportedLayoutHeight fixed
+ */
+export default function Preloader(props: PreloaderProps) {
+    return (
+        <Safe name="Preloader">
+            <PreloaderInner {...props} />
+        </Safe>
     )
 }
 

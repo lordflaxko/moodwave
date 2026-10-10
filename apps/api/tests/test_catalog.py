@@ -26,7 +26,9 @@ def test_committed_artwork_covers_most_of_the_catalog():
 def test_catalog_tracks_carry_cover_and_portrait():
     row = next(r for r in CATALOG if catalog_id(r) in artwork_map() and r.artist in artist_image_map())
     track = row_to_track(row)
-    assert track.image_url == artwork_map()[catalog_id(row)]
+    art = artwork_map()[catalog_id(row)]
+    assert track.image_large == art
+    assert track.image_url and track.image_url != "" and "1000x1000" not in track.image_url
     assert track.artist_images == [artist_image_map()[row.artist]]
 
 

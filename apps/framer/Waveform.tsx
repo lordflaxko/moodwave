@@ -2,7 +2,7 @@ import { addPropertyControls, ControlType, useIsStaticRenderer } from "framer"
 import { useReducedMotion } from "framer-motion"
 import { useEffect, useRef, type CSSProperties } from "react"
 
-import { C } from "./MoodwaveAPI.tsx"
+import { C, Safe } from "./MoodwaveAPI.tsx"
 
 /**
  * A thin oscilloscope line between sections. It hums quietly, swells where the pointer is,
@@ -17,14 +17,7 @@ interface WaveformProps {
 
 const POINTS = 120
 
-/**
- * @framerIntrinsicWidth 1200
- * @framerIntrinsicHeight 90
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight fixed
- */
-export default function Waveform(props: WaveformProps) {
+function WaveformInner(props: WaveformProps) {
     const { accent = C.lilac, intensity = 1 } = props
     const isStatic = useIsStaticRenderer()
     const reduced = useReducedMotion()
@@ -108,6 +101,21 @@ export default function Waveform(props: WaveformProps) {
                 <path ref={path} d="M0,45 L1200,45" fill="none" stroke={`url(#${id})`} strokeWidth="1.25" />
             </svg>
         </div>
+    )
+}
+
+/**
+ * @framerIntrinsicWidth 1200
+ * @framerIntrinsicHeight 90
+ *
+ * @framerSupportedLayoutWidth any-prefer-fixed
+ * @framerSupportedLayoutHeight fixed
+ */
+export default function Waveform(props: WaveformProps) {
+    return (
+        <Safe name="Waveform">
+            <WaveformInner {...props} />
+        </Safe>
     )
 }
 

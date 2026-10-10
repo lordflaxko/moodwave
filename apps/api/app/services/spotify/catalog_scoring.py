@@ -99,8 +99,16 @@ def artist_image_map() -> dict[str, str]:
     return json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
 
 
+def _thumb(url: str | None) -> str | None:
+    """Deezer/Apple artwork at ~500px instead of the 1000px original."""
+    if not url:
+        return url
+    return url.replace("/1000x1000-", "/500x500-").replace("/1000x1000bb.", "/500x500bb.")
+
+
 def row_to_track(row: CatalogRow, reason: str | None = None) -> Track:
     tid = catalog_id(row)
+    art = artwork_map().get(tid)
     return Track(
         id=tid,
         uri=f"demo:track:{tid}",
@@ -108,7 +116,8 @@ def row_to_track(row: CatalogRow, reason: str | None = None) -> Track:
         artists=[row.artist],
         artist_images=[artist_image_map().get(row.artist)],
         album=row.album,
-        image_url=artwork_map().get(tid),
+        image_url=_thumb(art),
+        image_large=art,
         duration_ms=row.seconds * 1000,
         explicit=row.explicit,
         popularity=row.popularity,

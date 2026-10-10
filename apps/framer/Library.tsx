@@ -2,7 +2,7 @@ import { addPropertyControls, ControlType, useIsStaticRenderer } from "framer"
 import { motion } from "framer-motion"
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react"
 
-import { api, C, Collage, duration, EASE, MONO, relativeTime, SANS, SERIF, signIn, useSession, type PlaylistSummary } from "./MoodwaveAPI.tsx"
+import { api, C, Collage, duration, EASE, MONO, relativeTime, SANS, SERIF, signIn, useSession, type PlaylistSummary, Safe } from "./MoodwaveAPI.tsx"
 
 /** Moodwave library (`/library`): every playlist you've made, newest first. */
 
@@ -42,14 +42,7 @@ function Empty({ title, body, children }: { title: string; body: string; childre
     )
 }
 
-/**
- * @framerIntrinsicWidth 1120
- * @framerIntrinsicHeight 640
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight auto
- */
-export default function Library(props: LibraryProps) {
+function LibraryInner(props: LibraryProps) {
     const { playlistPath = "/playlist", createPath = "/create", accent = C.lilac } = props
     const isStatic = useIsStaticRenderer()
     const session = useSession(!isStatic)
@@ -181,6 +174,21 @@ export default function Library(props: LibraryProps) {
                 ))}
             </ul>
         </div>
+    )
+}
+
+/**
+ * @framerIntrinsicWidth 1120
+ * @framerIntrinsicHeight 640
+ *
+ * @framerSupportedLayoutWidth any-prefer-fixed
+ * @framerSupportedLayoutHeight auto
+ */
+export default function Library(props: LibraryProps) {
+    return (
+        <Safe name="Library">
+            <LibraryInner {...props} />
+        </Safe>
     )
 }
 

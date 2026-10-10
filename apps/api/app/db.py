@@ -2,6 +2,7 @@
 
 from collections.abc import Iterator
 
+from sqlalchemy import inspect, text
 from sqlmodel import Session, SQLModel, create_engine
 
 from app.core.config import get_settings
@@ -18,6 +19,34 @@ def init_db() -> None:
     from app import models  # noqa: F401
 
     SQLModel.metadata.create_all(engine)
+    add_missing_columns()
+
+
+def add_missing_columns(bind=None) -> list[str]:
+    """Add columns that models gained since their table was created.
+
+    `create_all` only creates missing tables. With no migration tool, new nullable (or
+    defaulted) columns on existing tables are added here at startup. Returns what it added.
+    """
+    bind = bind or engine
+    inspector = inspect(bind)
+    added: list[str] = []
+    with bind.begin() as conn:
+        for table in SQLModel.metadata.sorted_tables:
+            if not inspector.has_table(table.name):
+                continue
+            existing = {c["name"] for c in inspector.get_columns(table.name)}
+            for column in table.columns:
+                if column.name in existing or column.primary_key:
+                    continue
+                ddl_type = column.type.compile(dialect=bind.dialect)
+                default = ""
+                if column.default is not None and getattr(column.default, "is_scalar", False):
+                    value = column.default.arg
+                    default = f" DEFAULT {'TRUE' if value is True else 'FALSE' if value is False else repr(value)}"
+                conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{column.name}" {ddl_type}{default}'))
+                added.append(f"{table.name}.{column.name}")
+    return added
 
 
 def get_session() -> Iterator[Session]:
