@@ -54,6 +54,7 @@
 - **Share links** show a rich preview (cover and title) in chat apps and open a read-only page anyone can play.
 
 **Around it**
+- **“Made with Moodwave”** on Home: the owner's featured playlists, playable in one tap (★ Feature on Home on any playlist).
 - A library with search across titles, moods, artists and genres, energy and mood filters, sorting, and duplicate, rename and delete.
 - Guest mode, an invite-only notice for Spotify's development mode, self-serve **Delete my account and data**, and FAQ, Privacy and Terms pages.
 - Accessibility: keyboard paths and visible focus rings throughout, focus-trapped dialogs, reduced-motion support, and 4.5:1 text contrast.
@@ -87,7 +88,7 @@ flowchart LR
 - **Framer front end.** Pages, layout and content (including the artist tickers in the Framer CMS) are built in Framer. Everything interactive is a typed React code component, mirrored in [`apps/framer/`](apps/framer) with notes in its [README](apps/framer/README.md). `MoodwaveAPI.tsx` holds the API client, session store, shared player, error reporting and accessibility helpers.
 - **API.** Routers depend on the `AIProvider` and `SpotifyClient` protocols. FastAPI dependencies choose Claude or the offline curator, and a user's Spotify session, the app's own Spotify token for guests, or the bundled demo catalogue for tests.
 - **Sessions.** The Framer site uses a signed bearer token (Spotify sign-in returns through a one-time hand-off code). Spotify tokens are Fernet-encrypted at rest. Keys and tokens never reach the browser.
-- **Ops.** CI runs tests, lint and builds on every push. Render deploys `main`. An uptime monitor keeps the free instance awake. Crashes from the site and the API go to a private error log (`/errors`, owner only).
+- **Ops.** CI runs tests, lint and builds on every push and weekly. A daily smoke test checks the live site and API. Render deploys `main`, and an uptime monitor keeps the free instance awake. The owner dashboard (`/admin`) shows usage, estimated AI spend and the error log.
 
 ## The AI workflow
 
@@ -174,7 +175,8 @@ Environment variables for `apps/api` (in production they're set in the Render da
 | `ALLOW_GUEST` | `true` | Guest mode |
 | `GUEST_PLAYLISTS_PER_DAY` / `GUEST_MAX_TRACKS` / `GUEST_AI_PER_DAY` | 5 / 30 / 40 | Guest limits |
 | `GUEST_RETENTION_DAYS` | 30 | How long guest data is kept |
-| `OWNER_SPOTIFY_IDS` | first account | Who can read the error log |
+| `OWNER_SPOTIFY_IDS` | first account | The site owner (dashboard, featuring playlists) |
+| `AI_PRICE_INPUT_PER_MTOK` / `AI_PRICE_OUTPUT_PER_MTOK` | 3 / 15 | USD per million tokens for the dashboard's cost estimate (set from Anthropic's current pricing) |
 | `GENERATE_RATE_LIMIT_PER_MINUTE` | 8 | Per-user AI rate limit |
 
 ## API reference
@@ -198,6 +200,9 @@ Interactive docs: `/docs` on the API. Highlights:
 | `GET` | `/share/{slug}` · `/s/{slug}` | Shared playlist JSON · preview page for chat apps |
 | `POST` / `GET` | `/feedback` | 👍 / 👎 on songs |
 | `POST` / `GET` | `/telemetry/error` · `/telemetry/errors` | Report a crash · owner-only error log |
+| `GET` | `/admin/stats` | Owner dashboard: playlists per day, users, guest budget, AI calls, tokens and estimated cost |
+| `POST` / `DELETE` | `/playlists/{id}/feature` | Feature on Home (owner only) |
+| `GET` | `/share/featured` | Public list of featured playlists |
 
 ## Project structure
 
@@ -233,6 +238,17 @@ cd apps/web && npm run lint && npm run typecheck
 ```
 
 CI runs these on every push. Framer components are type-checked in Framer before publishing.
+
+## Maintenance
+
+What keeps running on its own:
+- **CI** on every push and every Monday (tests, lint, types, build).
+- **Live smoke test** daily (`.github/workflows/smoke.yml`): API health and config, the site, CORS, share links and a guest round trip, with no secrets and no AI cost. A failure emails the repo owner. Run it any time from the Actions tab.
+- **Uptime monitor** (UptimeRobot) pings `/health` every 5 minutes and emails on downtime.
+- **GitHub security:** Dependabot alerts, secret scanning and push protection are on.
+- **Housekeeping in the API:** guest accounts expire after 30 days, and the error log keeps the latest 2,000 entries.
+
+GitHub pauses scheduled workflows after about 60 days with no repo activity. It emails first, and one click on the Actions tab turns them back on.
 
 ## Design decisions
 

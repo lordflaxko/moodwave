@@ -39,6 +39,8 @@ export interface User {
     is_demo: boolean
     /** Trying Moodwave without Spotify: limits apply, nothing saves to Spotify. */
     is_guest?: boolean
+    /** The site owner (dashboard, featuring playlists on Home). */
+    is_owner?: boolean
 }
 export interface AppConfig {
     demo_mode: boolean
@@ -111,6 +113,8 @@ export interface Playlist {
     cover?: PlaylistCoverChoice
     /** Public read-only link is `${API_URL}/s/${share_slug}`; null when sharing is off. */
     share_slug?: string | null
+    /** Shown in "Made with Moodwave" on Home. */
+    featured?: boolean
 }
 export interface PlaylistCoverChoice {
     mode: "auto" | "grid" | "single" | "upload"
@@ -898,6 +902,7 @@ export type IconName =
     | "close"
     | "user"
     | "undo"
+    | "star"
 
 // Stroke icons (Lucide-style, 24px grid). Multiple subpaths share one `d`.
 const STROKE_ICONS: Partial<Record<IconName, string>> = {
@@ -938,6 +943,12 @@ export function Icon({ name, size = 16, style }: { name: IconName; size?: number
                 <path d="M7 4.5v15a1 1 0 0 0 1.53.85l12-7.5a1 1 0 0 0 0-1.7l-12-7.5A1 1 0 0 0 7 4.5Z" />
             </svg>
         )
+    if (name === "star")
+        return (
+            <svg {...common} fill="currentColor">
+                <path d="M12 2.8l2.8 5.7 6.3.9-4.6 4.4 1.1 6.2L12 17.1 6.4 20l1.1-6.2L2.9 9.4l6.3-.9L12 2.8Z" />
+            </svg>
+        )
     if (name === "pause")
         return (
             <svg {...common} fill="currentColor">
@@ -971,6 +982,7 @@ const ICON_MOTION: Partial<Record<IconName, { hover: Record<string, number>; tap
     image: { hover: { scale: 1.12 } },
     "sign-out": { hover: { x: 2 } },
     undo: { hover: { rotate: -35 } },
+    star: { hover: { rotate: 72, scale: 1.2 } },
 }
 
 export type BtnVariant = "accent" | "spotify" | "light" | "ghost" | "danger" | "quiet"

@@ -123,3 +123,13 @@ Code components use `Btn` and `Icon` from `MoodwaveAPI.tsx` instead of hand-styl
 `<Btn variant icon iconRight size busy href>`: sizes `sm`/`md`/`lg`, `busy` swaps the icon for a
 spinner, `href` renders a link. Icons react on hover (arrows slide, ▶ pops, ↻ spins). Native Framer
 buttons on the pages use the matching hover lift + glow + press and Phosphor icons.
+
+### Owner dashboard and featured playlists
+
+- `ErrorsView.tsx` is the owner dashboard on `/admin` (also served at `/errors`, since redirects
+  need a paid Framer plan): stat cards, a 14-day playlists chart and the error log, all from
+  `GET /admin/stats` and `/telemetry/errors`.
+- `FeaturedPlaylists.tsx` sits on Home after the Showcase ("Made with Moodwave"). It reads
+  `GET /share/featured`, links each card to `/p?s=…`, and ▶ plays the whole playlist in the
+  shared player. It renders nothing (and takes no space) until a playlist is featured.
+- The owner sees ★ Feature on Home in the playlist header; featuring turns sharing on.

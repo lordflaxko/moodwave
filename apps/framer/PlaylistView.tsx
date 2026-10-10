@@ -911,6 +911,20 @@ function PlaylistViewInner(props: PlaylistViewProps) {
         }
     }
 
+    const toggleFeature = async () => {
+        if (!playlist || busy) return
+        setBusy("feature")
+        try {
+            const next = await api<Playlist>(`/playlists/${playlist.id}/feature`, { method: playlist.featured ? "DELETE" : "POST" })
+            setPlaylist(next)
+            setFlash(next.featured ? "Featured on the Home page." : "Removed from the Home page.")
+        } catch (e) {
+            setFlash((e as Error).message)
+        } finally {
+            setBusy(null)
+        }
+    }
+
     const sync = async () => {
         if (!playlist || busy) return
         setBusy("sync")
@@ -1136,6 +1150,20 @@ function PlaylistViewInner(props: PlaylistViewProps) {
                             </Btn>
                             <AnimatePresence>{sharing ? <SharePanel key="share" playlist={playlist} accent={accent} onClose={() => setSharing(false)} onChange={setPlaylist} /> : null}</AnimatePresence>
                         </span>
+                        {session.user?.is_owner ? (
+                            <Btn
+                                variant="ghost"
+                                icon="star"
+                                busy={busy === "feature"}
+                                disabled={Boolean(busy) && busy !== "feature"}
+                                aria-pressed={Boolean(playlist.featured)}
+                                title={playlist.featured ? "Shown on the Home page (click to remove)" : "Show this playlist on the Home page (turns sharing on)"}
+                                onClick={() => void toggleFeature()}
+                                style={playlist.featured ? { color: C.ink, background: accent, borderColor: "transparent" } : undefined}
+                            >
+                                {playlist.featured ? "Featured" : "Feature on Home"}
+                            </Btn>
+                        ) : null}
                         <Btn variant="ghost" icon="plus" href={createPath}>
                             New playlist
                         </Btn>
