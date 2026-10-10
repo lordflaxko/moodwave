@@ -100,3 +100,9 @@ canvas), linked from the footer. `content/legal_pages.js` is the script that fir
 (it holds the original wording). Questions go to the repo's GitHub Issues. Data deletion is
 self-serve: **Delete my account and data** in the account menu (`DELETE /auth/me`).
 Keep the Privacy page in step with the code if what's stored or shared changes.
+
+### Footer
+
+The layout template footer links (Create, Library, How it works, FAQ, Privacy, Terms, GitHub)
+sit in one row on desktop and tablet and wrap onto two lines on phone. The GitHub link uses
+Phosphor's "Github Logo" icon and opens the repo in a new tab.
