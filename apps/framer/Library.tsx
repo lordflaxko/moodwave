@@ -70,12 +70,12 @@ const chip = (active: boolean, accent: string): CSSProperties => ({
     transition: "background 0.2s ease, color 0.2s ease, border-color 0.2s ease",
 })
 
-function Empty({ title, body, children }: { title: string; body: string; children: ReactNode }) {
+function Empty({ title, body, children }: { title: string; body: string; children?: ReactNode }) {
     return (
         <div style={{ textAlign: "center", padding: "72px 16px", borderRadius: 28, border: `1px dashed ${C.line2}` }}>
             <h2 style={{ fontFamily: SERIF, fontWeight: 300, fontSize: 34, letterSpacing: "-0.02em", margin: 0, color: C.text }}>{title}</h2>
-            <p style={{ color: C.subtle, fontSize: 15, margin: "10px auto 24px", maxWidth: 420, lineHeight: 1.55 }}>{body}</p>
-            <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>{children}</div>
+            <p style={{ color: C.subtle, fontSize: 15, margin: children ? "10px auto 24px" : "10px auto 0", maxWidth: 420, lineHeight: 1.55 }}>{body}</p>
+            {children ? <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>{children}</div> : null}
         </div>
     )
 }
@@ -252,9 +252,6 @@ function LibraryInner(props: LibraryProps) {
                             Continue with Spotify
                         </Btn>
                     ) : null}
-                    <Btn variant="ghost" size="lg" icon="plus" href={createPath}>
-                        Make a playlist
-                    </Btn>
                 </Empty>
             </div>
         )
@@ -275,11 +272,7 @@ function LibraryInner(props: LibraryProps) {
     if (!items?.length) {
         return (
             <div style={root}>
-                <Empty title="Nothing here yet" body="Describe a moment and your first playlist will land here.">
-                    <Btn variant="accent" accent={accent} size="lg" iconRight="arrow-right" href={createPath}>
-                        Start a playlist
-                    </Btn>
-                </Empty>
+                <Empty title="Nothing here yet" body="Use New playlist above to describe a moment. Your first playlist will land here." />
             </div>
         )
     }
