@@ -15,7 +15,7 @@ paste it into the matching code file in the Framer project (or the other way rou
 | `AccountChip.tsx` | Nav (layout template) | Spotify status, sign in / sign out |
 | `MobileMenu.tsx` | Nav, phone only | Burger + full-screen menu with the account status |
 | `Grain.tsx` | Layout template | Site-wide film grain |
-| `Cursor.tsx` | Layout template | Trailing ring that swells over links (mouse only) |
+| `Cursor.tsx` | Layout template | A tiny spinning vinyl that trails the pointer: spins faster as you move, grows with ▶ (↗ for external links) over clickables, soundwave ripple on click |
 | `Preloader.tsx` | Home | Vinyl + equaliser intro, once per session |
 | `Spotlight.tsx` | Home hero | Light that follows the pointer over the portrait wall |
 | `FlowStory.tsx` | Home | Scroll-pinned "How it flows" story (stacked on phones) |
