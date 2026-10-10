@@ -212,3 +212,37 @@ def test_missing_columns_are_added(tmp_path):
     assert "clienterror.page" in added and "clienterror.source" in added
     assert {"page", "source", "stack"} <= {c["name"] for c in inspect(eng).get_columns("clienterror")}
     assert add_missing_columns(eng) == []  # idempotent
+
+
+def test_feedback_roundtrip_and_clear(demo_client):
+    body = {"track_id": "abc", "title": "Song", "artist": "Someone", "verdict": "down"}
+    assert demo_client.post("/feedback", json=body).status_code == 204
+    assert demo_client.post("/feedback", json=body | {"verdict": "up"}).status_code == 204
+    assert demo_client.get("/feedback").json() == [{"track_id": "abc", "verdict": "up"}]
+    assert demo_client.post("/feedback", json=body | {"verdict": "clear"}).status_code == 204
+    assert demo_client.get("/feedback").json() == []
+
+
+def test_generate_stream_emits_progress_then_playlist(demo_client):
+    import json
+
+    with demo_client.stream(
+        "POST", "/playlists/generate/stream", json={"prompt": "late night city", "length": 15}
+    ) as res:
+        assert res.status_code == 200
+        assert res.headers["content-type"].startswith("text/event-stream")
+        events = [json.loads(line[6:]) for line in res.iter_lines() if line.startswith("data: ")]
+    kinds = [e["type"] for e in events]
+    assert kinds[0] == "stage" and "intent" in kinds and "track" in kinds
+    assert kinds[-1] == "done"
+    playlist = events[-1]["playlist"]
+    assert len(playlist["tracks"]) >= 15
+    assert demo_client.get(f"/playlists/{playlist['id']}").status_code == 200
+
+
+def test_generate_stream_reports_errors(demo_client):
+    import json
+
+    with demo_client.stream("POST", "/playlists/generate/stream", json={"prompt": "x" * 5, "length": 15}) as res:
+        events = [json.loads(line[6:]) for line in res.iter_lines() if line.startswith("data: ")]
+    assert events[-1]["type"] in ("done", "error")

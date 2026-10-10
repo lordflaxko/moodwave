@@ -91,3 +91,15 @@ class ClientError(SQLModel, table=True):
     stack: str = ""
     user_agent: str = ""
     user_id: str | None = Field(default=None, index=True)
+
+
+class TrackFeedback(SQLModel, table=True):
+    """A listener's thumbs up/down on a song; shapes future picks."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: str = Field(foreign_key="user.id", index=True)
+    track_id: str = Field(index=True)
+    title: str = ""
+    artist: str = ""
+    verdict: str = Field(description="up | down")
+    created_at: datetime = Field(default_factory=_now)

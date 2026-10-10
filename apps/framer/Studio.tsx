@@ -13,9 +13,12 @@ import {
     signIn,
     sized,
     startDemo,
+    StreamUnavailable,
+    streamGenerate,
     useFeaturedCovers,
     useSession,
     useWarming,
+    type GenerateEvent,
     type GenerateInput,
     type Playlist,
     Safe,
@@ -44,6 +47,42 @@ type Phase =
     | { kind: "error"; message: string; input: GenerateInput }
 
 const STEPS = ["Reading the vibe", "Sketching the arc", "Finding real records", "Checking every track", "Sequencing the flow"]
+
+/** What the live stream has told us so far (null when generating without the stream). */
+interface Live {
+    events: number
+    stage: "planning" | "verifying" | "filling" | "finishing"
+    title: string | null
+    moods: string[]
+    done: number
+    total: number
+    have: number
+    found: { title: string; artist: string; cover: string | null }[]
+}
+const EMPTY_LIVE: Live = { events: 0, stage: "planning", title: null, moods: [], done: 0, total: 0, have: 0, found: [] }
+
+function applyEvent(live: Live, e: GenerateEvent): Live {
+    const next = { ...live, events: live.events + 1 }
+    if (e.type === "stage") return { ...next, stage: e.stage, have: e.have ?? live.have }
+    if (e.type === "intent") return { ...next, title: e.title, moods: e.moods }
+    if (e.type === "verifying") return { ...next, stage: "verifying", done: e.done, total: e.total }
+    if (e.type === "track") return { ...next, found: [...live.found, { title: e.title, artist: e.artist, cover: e.cover }].slice(-40) }
+    return next
+}
+
+function liveStep(live: Live, length: number): string {
+    if (live.stage === "planning") return live.title ? `Sketching “${live.title}”` : "Reading the vibe"
+    if (live.stage === "verifying") return `Checking every track · ${live.done} / ${live.total}`
+    if (live.stage === "filling") return `Finding a few more that fit · ${live.have} / ${length}`
+    return "Sequencing the flow"
+}
+
+function liveProgress(live: Live, elapsed: number): number {
+    if (live.stage === "planning") return Math.min(0.3, 0.3 * (1 - Math.exp(-elapsed / 25)))
+    if (live.stage === "verifying") return 0.3 + 0.5 * (live.total ? live.done / live.total : 0)
+    if (live.stage === "filling") return 0.85
+    return 0.95
+}
 
 function readRequest(): GenerateInput | null {
     const params = new URLSearchParams(window.location.search)
@@ -115,9 +154,13 @@ function CoverOrbit({ covers, reduced }: { covers: string[]; reduced: boolean })
     )
 }
 
-function Overlay({ prompt, accent, length }: { prompt: string; accent: string; length: number }) {
+function Overlay({ prompt, accent, length, live }: { prompt: string; accent: string; length: number; live: Live | null }) {
     const reduced = Boolean(useReducedMotion())
-    const covers = useFeaturedCovers(10)
+    const featured = useFeaturedCovers(10)
+    // Verified covers fly into the orbit as they're found.
+    const foundCovers = live ? [...new Set(live.found.map((f) => f.cover).filter((c): c is string => Boolean(c)))].reverse() : []
+    const covers = foundCovers.length >= 3 ? [...foundCovers, ...featured].slice(0, 10) : featured
+    const latest = live?.found[live.found.length - 1]
     const warming = useWarming()
     const [step, setStep] = useState(0)
     const [elapsed, setElapsed] = useState(0)
@@ -132,7 +175,10 @@ function Overlay({ prompt, accent, length }: { prompt: string; accent: string; l
         }, 200)
         return () => window.clearInterval(id)
     }, [estimate])
-    const progress = Math.min(0.95, 1 - Math.exp(-elapsed / (estimate * 0.6)))
+    const streaming = Boolean(live && live.events > 0)
+    const progress = live && streaming ? liveProgress(live, elapsed) : Math.min(0.95, 1 - Math.exp(-elapsed / (estimate * 0.6)))
+    const stepText = live && streaming ? liveStep(live, length) : STEPS[step]
+    const slowStart = Boolean(live && live.events === 0 && elapsed > 6)
     const words = prompt.split(/\s+/)
     const beat = Math.max(0.7, 1.6 - step * 0.2)
 
@@ -201,20 +247,36 @@ function Overlay({ prompt, accent, length }: { prompt: string; accent: string; l
                 </p>
                 <AnimatePresence mode="wait">
                     <motion.div
-                        key={step}
+                        key={live && streaming ? live.stage + (live.title ?? "") : step}
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: -8 }}
                         transition={{ duration: 0.45, ease: EASE }}
                         style={{ fontFamily: SANS, fontSize: 15, color: C.muted }}
                     >
-                        {STEPS[step]}…
+                        {stepText}…
                     </motion.div>
                 </AnimatePresence>
-                <div style={{ width: 220, height: 2, borderRadius: 2, background: C.line2, margin: "20px auto 0", overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${progress * 100}%`, background: accent, transition: "width 0.2s linear" }} />
+                <div style={{ height: 22, marginTop: 10 }}>
+                    <AnimatePresence mode="popLayout">
+                        {latest ? (
+                            <motion.div
+                                key={`${latest.title}-${live?.found.length}`}
+                                initial={{ opacity: 0, y: 6 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -6 }}
+                                transition={{ duration: 0.3, ease: EASE }}
+                                style={{ fontFamily: SANS, fontSize: 13, color: C.subtle, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 420, margin: "0 auto" }}
+                            >
+                                <span style={{ color: accent }}>✓</span> {latest.title} — {latest.artist}
+                            </motion.div>
+                        ) : null}
+                    </AnimatePresence>
                 </div>
-                {warming ? (
+                <div style={{ width: 220, height: 2, borderRadius: 2, background: C.line2, margin: "12px auto 0", overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${progress * 100}%`, background: accent, transition: "width 0.4s ease-out" }} />
+                </div>
+                {warming || slowStart ? (
                     <p style={{ fontFamily: SANS, fontSize: 13, color: C.subtle, margin: "14px 0 0" }}>Waking up the studio… the first request after a quiet spell takes a moment.</p>
                 ) : null}
                 {length > 40 ? (
@@ -275,13 +337,26 @@ function StudioInner(props: StudioProps) {
     const isStatic = useIsStaticRenderer()
     const sessionState = useSession(!isStatic)
     const [phase, setPhase] = useState<Phase>({ kind: "idle" })
+    const [live, setLive] = useState<Live | null>(null)
     const started = useRef(false)
+
+    const generate = async (input: GenerateInput): Promise<Playlist> => {
+        setLive(EMPTY_LIVE)
+        try {
+            return await streamGenerate(input, (e: GenerateEvent) => setLive((l) => applyEvent(l ?? EMPTY_LIVE, e)))
+        } catch (e) {
+            if (!(e instanceof StreamUnavailable)) throw e
+            // No stream (older API or a blocking proxy): the plain request, with timed steps.
+            setLive(null)
+            return api<Playlist>("/playlists/generate", { method: "POST", body: JSON.stringify(input) })
+        }
+    }
 
     const run = async (input: GenerateInput) => {
         setPhase({ kind: "running", input })
         const startedAt = Date.now()
         try {
-            const playlist = await api<Playlist>("/playlists/generate", { method: "POST", body: JSON.stringify(input) })
+            const playlist = await generate(input)
             // Keep the overlay up long enough to read, even when generation is instant.
             const remaining = 2400 - (Date.now() - startedAt)
             if (remaining > 0) await new Promise((r) => setTimeout(r, remaining))
@@ -323,7 +398,7 @@ function StudioInner(props: StudioProps) {
 
     return (
         <div style={{ position: "relative", width: "100%", ...props.style, height: "auto" }}>
-            <AnimatePresence>{phase.kind === "running" ? <Overlay key="overlay" prompt={phase.input.prompt} accent={accent} length={phase.input.length} /> : null}</AnimatePresence>
+            <AnimatePresence>{phase.kind === "running" ? <Overlay key="overlay" prompt={phase.input.prompt} accent={accent} length={phase.input.length} live={live} /> : null}</AnimatePresence>
 
             <AnimatePresence mode="wait">
                 {phase.kind === "auth" ? (

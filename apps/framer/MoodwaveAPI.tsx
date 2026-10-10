@@ -700,16 +700,23 @@ interface SpotifyController {
     play: () => void
     togglePlay: () => void
     destroy?: () => void
-    addListener: (event: string, cb: (e: { data: { isPaused: boolean } }) => void) => void
+    addListener: (event: string, cb: (e: { data: { isPaused: boolean; position?: number; duration?: number } }) => void) => void
 }
 type SpotifyIframeApi = { createController: (el: HTMLElement, opts: object, cb: (c: SpotifyController) => void) => void }
 
+export interface QueueItem {
+    id: string
+    label: string
+}
 export interface PlayerState {
     id: string | null
     label: string
     playing: boolean
+    /** What plays next: a playlist, or the showcase songs. Empty for a single song. */
+    queue: QueueItem[]
+    index: number
 }
-let playerState: PlayerState = { id: null, label: "", playing: false }
+let playerState: PlayerState = { id: null, label: "", playing: false, queue: [], index: -1 }
 const playerListeners = new Set<(s: PlayerState) => void>()
 const setPlayer = (patch: Partial<PlayerState>) => {
     playerState = { ...playerState, ...patch }
@@ -746,11 +753,22 @@ export function usePlayer(): PlayerState {
  * Play a track (call from a click). The same track toggles play/pause; another track swaps
  * in place. The first play opens the dock, which creates the player.
  */
-export function requestPlay(id: string, label: string) {
+export function requestPlay(id: string, label: string, queue?: QueueItem[]) {
+    if (queue) {
+        const index = queue.findIndex((q) => q.id === id)
+        setPlayer(index >= 0 ? { queue, index } : { queue: [], index: -1 })
+    } else if (playerState.id !== id) {
+        setPlayer({ queue: [], index: -1 })
+    }
     if (playerState.id === id && spotifyController) {
         spotifyController.togglePlay()
         return
     }
+    load(id, label)
+}
+
+function load(id: string, label: string) {
+    advancedFor = null
     setPlayer({ id, label, playing: false })
     if (spotifyController) {
         spotifyController.loadUri(`spotify:track:${id}`)
@@ -758,10 +776,58 @@ export function requestPlay(id: string, label: string) {
     }
 }
 
+/** Play a whole list from the top (or from `start`). */
+export function playQueue(queue: QueueItem[], start = 0) {
+    if (!queue.length) return
+    const item = queue[Math.max(0, Math.min(start, queue.length - 1))]
+    setPlayer({ queue, index: queue.indexOf(item) })
+    load(item.id, item.label)
+}
+
+export function skipTrack(step: 1 | -1) {
+    const { queue, index } = playerState
+    const next = index + step
+    if (!queue.length || next < 0 || next >= queue.length) return false
+    setPlayer({ index: next })
+    load(queue[next].id, queue[next].label)
+    return true
+}
+
+// Auto-advance: the embed reports position/duration; near the end, move on once per song.
+let advancedFor: string | null = null
+let lastPosition = 0
+function onPlayback(data: { isPaused: boolean; position?: number; duration?: number }) {
+    setPlayer({ playing: !data.isPaused })
+    const { position = 0, duration = 0 } = data
+    const nearEnd = duration > 0 && position >= duration - 400
+    // Some embeds jump back to 0 and pause when a song finishes.
+    const wrapped = data.isPaused && duration > 0 && position === 0 && lastPosition >= duration - 1500
+    lastPosition = position
+    if ((nearEnd || wrapped) && playerState.id && advancedFor !== playerState.id && playerState.queue.length > 1) {
+        advancedFor = playerState.id
+        window.setTimeout(() => skipTrack(1), nearEnd && !data.isPaused ? 450 : 0)
+    }
+}
+
 export function closePlayer() {
     spotifyController?.destroy?.()
     spotifyController = null
-    setPlayer({ id: null, label: "", playing: false })
+    setPlayer({ id: null, label: "", playing: false, queue: [], index: -1 })
+}
+
+function DockButton({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: ReactNode }) {
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            aria-label={label}
+            title={label}
+            style={{ width: 26, height: 26, flexShrink: 0, borderRadius: 26, border: "none", background: C.surface3, color: C.text, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.35 : 1, lineHeight: 1, fontSize: 11, display: "grid", placeItems: "center", padding: 0 }}
+        >
+            {children}
+        </button>
+    )
 }
 
 /** Render once per page. Shows while something is playing; owns the Spotify iframe. */
@@ -783,7 +849,7 @@ export function PlayerDock({ accent = C.lilac, bottom = 16 }: { accent?: string;
             api.createController(el, { uri, width: "100%", height: 80, theme: "dark" }, (c) => {
                 spotifyController = c
                 c.addListener("ready", () => c.play())
-                c.addListener("playback_update", (e) => setPlayer({ playing: !e.data.isPaused }))
+                c.addListener("playback_update", (e) => onPlayback(e.data))
             })
         })
         return () => {
@@ -811,9 +877,24 @@ export function PlayerDock({ accent = C.lilac, bottom = 16 }: { accent?: string;
                                     {state.playing ? "Now playing" : "Ready"} · {state.label}
                                 </span>
                             </span>
-                            <button type="button" onClick={closePlayer} aria-label="Close player" style={{ width: 24, height: 24, flexShrink: 0, borderRadius: 24, border: "none", background: C.surface3, color: C.text, cursor: "pointer", lineHeight: 1 }}>
-                                ×
-                            </button>
+                            <span style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                                {state.queue.length > 1 ? (
+                                    <>
+                                        <span style={{ fontFamily: MONO, fontSize: 11, color: C.faint, marginRight: 2 }} aria-live="polite">
+                                            {state.index + 1} / {state.queue.length}
+                                        </span>
+                                        <DockButton label="Previous song" disabled={state.index <= 0} onClick={() => skipTrack(-1)}>
+                                            ⏮
+                                        </DockButton>
+                                        <DockButton label="Next song" disabled={state.index >= state.queue.length - 1} onClick={() => skipTrack(1)}>
+                                            ⏭
+                                        </DockButton>
+                                    </>
+                                ) : null}
+                                <DockButton label="Close player" onClick={closePlayer}>
+                                    ×
+                                </DockButton>
+                            </span>
                         </div>
                         <div ref={mount} />
                     </div>
@@ -822,6 +903,133 @@ export function PlayerDock({ accent = C.lilac, bottom = 16 }: { accent?: string;
         </AnimatePresence>,
         document.body,
     )
+}
+
+// --- Track feedback (thumbs up/down) -------------------------------------------------------
+// Liked songs steer future playlists; disliked ones (and artists disliked twice) are avoided.
+
+export type Verdict = "up" | "down"
+let feedback: Record<string, Verdict> = {}
+let feedbackLoaded: Promise<void> | null = null
+const feedbackListeners = new Set<(f: Record<string, Verdict>) => void>()
+const emitFeedback = () => feedbackListeners.forEach((fn) => fn(feedback))
+
+export function useFeedback(enabled: boolean): Record<string, Verdict> {
+    const [state, setState] = useState(feedback)
+    useEffect(() => {
+        feedbackListeners.add(setState)
+        if (enabled && getToken()) {
+            feedbackLoaded ??= api<{ track_id: string; verdict: Verdict }[]>("/feedback")
+                .then((rows) => {
+                    feedback = Object.fromEntries(rows.map((r) => [r.track_id, r.verdict]))
+                    emitFeedback()
+                })
+                .catch(() => {
+                    feedbackLoaded = null
+                })
+        }
+        setState(feedback)
+        return () => {
+            feedbackListeners.delete(setState)
+        }
+    }, [enabled])
+    return state
+}
+
+/** Toggle a verdict (same verdict again clears it). Optimistic; rolls back on failure. */
+export async function giveFeedback(track: Track, verdict: Verdict): Promise<Verdict | null> {
+    const before = feedback[track.id]
+    const next = before === verdict ? null : verdict
+    feedback = { ...feedback }
+    if (next) feedback[track.id] = next
+    else delete feedback[track.id]
+    emitFeedback()
+    try {
+        await api("/feedback", {
+            method: "POST",
+            body: JSON.stringify({ track_id: track.id, title: track.title, artist: track.artists[0] ?? "", verdict: next ?? "clear" }),
+        })
+    } catch (e) {
+        feedback = { ...feedback }
+        if (before) feedback[track.id] = before
+        else delete feedback[track.id]
+        emitFeedback()
+        throw e
+    }
+    return next
+}
+
+// --- Streamed generation -------------------------------------------------------------------
+// POST /playlists/generate/stream sends Server-Sent Events while the playlist is built.
+
+export type GenerateEvent =
+    | { type: "stage"; stage: "planning" | "filling" | "finishing"; have?: number; target?: number }
+    | { type: "intent"; title: string; moods: string[]; energy: number }
+    | { type: "verifying"; done: number; total: number }
+    | { type: "track"; title: string; artist: string; cover: string | null }
+    | { type: "done"; playlist: Playlist }
+    | { type: "error"; status: number; detail: string }
+
+/**
+ * Generate with live progress. Resolves with the saved playlist. Throws `ApiError`; a
+ * `StreamUnavailable` error means the stream never started, so the caller can fall back.
+ */
+export class StreamUnavailable extends Error {}
+
+export async function streamGenerate(input: GenerateInput, onEvent: (e: GenerateEvent) => void): Promise<Playlist> {
+    const token = getToken()
+    const headers: Record<string, string> = { Accept: "text/event-stream", "Content-Type": "application/json" }
+    if (token) headers.Authorization = `Bearer ${token}`
+    let res: Response
+    try {
+        res = await fetch(`${API_URL}/playlists/generate/stream`, { method: "POST", headers, body: JSON.stringify(input) })
+    } catch {
+        throw new StreamUnavailable("network")
+    }
+    if (res.status === 401) {
+        setToken(null)
+        updateSession({ user: null })
+    }
+    if (!res.ok) {
+        let detail = `Something went wrong (${res.status}).`
+        try {
+            const body = await res.json()
+            if (typeof body?.detail === "string") detail = body.detail
+        } catch {
+            // Non-JSON error body.
+        }
+        if (res.status === 404 || res.status === 405) throw new StreamUnavailable(detail)
+        throw new ApiError(detail, res.status)
+    }
+    if (!res.body) throw new StreamUnavailable("no body")
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ""
+    for (;;) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        let cut: number
+        while ((cut = buffer.indexOf("\n\n")) >= 0) {
+            const chunk = buffer.slice(0, cut)
+            buffer = buffer.slice(cut + 2)
+            const data = chunk
+                .split("\n")
+                .filter((l) => l.startsWith("data: "))
+                .map((l) => l.slice(6))
+                .join("\n")
+            if (!data) continue
+            const event = JSON.parse(data) as GenerateEvent
+            if (event.type === "done") return event.playlist
+            if (event.type === "error") {
+                if (event.status >= 500) reportError(`API ${event.status} on streamed generate: ${event.detail}`)
+                throw new ApiError(event.detail, event.status)
+            }
+            onEvent(event)
+        }
+    }
+    throw new ApiError("The connection dropped before the playlist was ready. Check your library in a moment.", 0)
 }
 
 // --- Error reporting -----------------------------------------------------------------------

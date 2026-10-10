@@ -1,13 +1,21 @@
 """Playlist generation, refinement, editing, persistence and saving to Spotify."""
 
+import asyncio
+import json
+import logging
+import traceback
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
 from sqlmodel import col, select
 
 from app.deps import CurrentUser, DbSession, generation_rate_limit, get_pipeline, get_spotify
 from app.models import Playlist, PlaylistTrack, RefinementTurn
+from app.routers.feedback import load_preferences
+from app.routers.telemetry import record_error
 from app.schemas import (
     GenerateRequest,
     MusicalIntent,
@@ -19,12 +27,25 @@ from app.schemas import (
     Track,
     UpdatePlaylistRequest,
 )
+from app.services.ai.base import AIError
 from app.services.pipeline import PlaylistPipeline, compute_stats
-from app.services.spotify.base import SpotifyClient
+from app.services.spotify.base import SpotifyClient, SpotifyError
 from app.services.spotify.catalog_scoring import CATALOG_BY_ID, artist_image_map, artwork_map
 
 router = APIRouter(prefix="/playlists", tags=["playlists"])
-PipelineDep = Annotated[PlaylistPipeline, Depends(get_pipeline)]
+log = logging.getLogger(__name__)
+
+
+def get_steered_pipeline(
+    pipeline: Annotated[PlaylistPipeline, Depends(get_pipeline)], user: CurrentUser, db: DbSession
+) -> PlaylistPipeline:
+    """The pipeline, steered by this listener's thumbs up/down."""
+    prefs = load_preferences(db, user.id)
+    pipeline.use_preferences(prefs.avoid_ids, prefs.avoid_artists, prefs.prompt_lines())
+    return pipeline
+
+
+PipelineDep = Annotated[PlaylistPipeline, Depends(get_steered_pipeline)]
 SpotifyDep = Annotated[SpotifyClient, Depends(get_spotify)]
 
 
@@ -103,6 +124,12 @@ def _get_owned(db: DbSession, user: CurrentUser, playlist_id: str) -> Playlist:
     dependencies=[Depends(generation_rate_limit)],
 )
 async def generate(body: GenerateRequest, user: CurrentUser, db: DbSession, pipeline: PipelineDep) -> PlaylistOut:
+    return await _generate_and_store(body, user, db, pipeline)
+
+
+async def _generate_and_store(
+    body: GenerateRequest, user: CurrentUser, db: DbSession, pipeline: PlaylistPipeline
+) -> PlaylistOut:
     result = await pipeline.generate(
         body.prompt.strip(),
         target=body.length,
@@ -125,6 +152,79 @@ async def generate(body: GenerateRequest, user: CurrentUser, db: DbSession, pipe
     db.commit()
     db.refresh(playlist)
     return _to_out(playlist, result.notice)
+
+
+# Streamed generations keep running if the tab closes; the playlist still lands in the library.
+_background: set[asyncio.Task] = set()
+
+
+def _sse(event: dict) -> str:
+    return f"data: {json.dumps(event, separators=(',', ':'))}\n\n"
+
+
+@router.post("/generate/stream", dependencies=[Depends(generation_rate_limit)])
+async def generate_stream(
+    body: GenerateRequest, request: Request, user: CurrentUser, db: DbSession, pipeline: PipelineDep
+) -> StreamingResponse:
+    """Same as /generate, but streams progress as Server-Sent Events, ending in `done` or `error`."""
+    queue: asyncio.Queue[dict | None] = asyncio.Queue()
+
+    async def progress(event: dict) -> None:
+        await queue.put(event)
+
+    pipeline.progress = progress
+
+    async def work() -> None:
+        try:
+            out = await _generate_and_store(body, user, db, pipeline)
+            await queue.put({"type": "done", "playlist": out.model_dump(mode="json")})
+        except HTTPException as exc:
+            await queue.put({"type": "error", "status": exc.status_code, "detail": exc.detail})
+        except SpotifyError as exc:
+            code = exc.status if exc.status in (401, 403, 404, 429) else 502
+            await queue.put({"type": "error", "status": code, "detail": str(exc)})
+        except AIError as exc:
+            await queue.put({"type": "error", "status": 503, "detail": str(exc)})
+        except Exception as exc:  # noqa: BLE001 - reported to the client and the error log
+            log.exception("Streamed generation failed")
+            try:
+                record_error(
+                    db,
+                    source="api",
+                    message=f"{type(exc).__name__}: {exc}"[:1000],
+                    stack="".join(traceback.format_exception(exc))[-4000:],
+                    page="POST /playlists/generate/stream",
+                    user_agent=request.headers.get("user-agent", ""),
+                )
+            except Exception:  # noqa: BLE001
+                log.warning("Could not record error", exc_info=True)
+            await queue.put(
+                {"type": "error", "status": 500, "detail": "Something went wrong on our side. It's been logged."}
+            )
+        finally:
+            await queue.put(None)
+
+    async def events() -> AsyncIterator[str]:
+        # Padding defeats proxy buffering so the first events arrive immediately.
+        yield ":" + " " * 2048 + "\n\n"
+        task = asyncio.create_task(work())
+        _background.add(task)
+        task.add_done_callback(_background.discard)
+        while True:
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=15)
+            except TimeoutError:
+                yield ": keep-alive\n\n"
+                continue
+            if event is None:
+                break
+            yield _sse(event)
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("", response_model=list[PlaylistSummary])

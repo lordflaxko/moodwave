@@ -2,6 +2,7 @@
 
 import json
 import logging
+from contextvars import ContextVar
 from typing import Any, Literal
 
 import anthropic
@@ -13,6 +14,8 @@ from app.services.ai import prompts
 from app.services.ai.base import AIError, CatalogPick
 
 log = logging.getLogger(__name__)
+# The listener's thumbs up/down history for the current request (the provider is shared).
+LISTENER_NOTES: ContextVar[tuple[str, ...]] = ContextVar("listener_notes", default=())
 _FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 
@@ -48,6 +51,9 @@ class ClaudeProvider:
         )
 
     async def _structured(self, user_message: str, schema: dict, effort: str) -> dict[str, Any]:
+        notes = LISTENER_NOTES.get()
+        if notes:
+            user_message += "\n<listener_feedback>\n" + "\n".join(notes) + "\n</listener_feedback>"
         kwargs: dict[str, Any] = {
             "model": self._settings.anthropic_model,
             # Room for thinking plus ~120 candidates; the SDK's non-streaming ceiling is ~21k.

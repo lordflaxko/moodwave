@@ -1,8 +1,8 @@
 import { addPropertyControls, ControlType, useIsStaticRenderer } from "framer"
 import { motion } from "framer-motion"
-import { useEffect, useState, type CSSProperties } from "react"
+import { useEffect, useRef, useState, type CSSProperties } from "react"
 
-import { C, PlayerDock, requestPlay, usePlayer, Safe } from "./MoodwaveAPI.tsx"
+import { C, PlayerDock, requestPlay, usePlayer, Safe, type QueueItem } from "./MoodwaveAPI.tsx"
 
 /**
  * Makes a CMS track row playable. Placed over the row (absolute, full size), it is an
@@ -25,6 +25,15 @@ interface TrackPlayProps {
 
 // The dock is rendered by one row for the whole page (see PlayerDock in MoodwaveAPI).
 let dockOwner: symbol | null = null
+
+// Every row on the page, so playing one queues the rest in page order.
+const rows = new Map<symbol, { el: HTMLElement; item: QueueItem }>()
+function pageQueue(): QueueItem[] {
+    return [...rows.values()]
+        .filter((r) => r.el.isConnected)
+        .sort((a, b) => (a.el.compareDocumentPosition(b.el) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
+        .map((r) => r.item)
+}
 
 function Bars({ color, playing }: { color: string; playing: boolean }) {
     return (
@@ -49,6 +58,17 @@ function TrackPlayInner(props: TrackPlayProps) {
     const [owner, setOwner] = useState(false)
     const mine = Boolean(spotifyId) && state.id === spotifyId
     const label = artist ? `${title} — ${artist}` : title
+    const button = useRef<HTMLButtonElement>(null)
+
+    useEffect(() => {
+        const el = button.current
+        if (isStatic || !el || !spotifyId) return
+        const key = Symbol("row")
+        rows.set(key, { el, item: { id: spotifyId, label } })
+        return () => {
+            rows.delete(key)
+        }
+    }, [isStatic, spotifyId, label])
 
     useEffect(() => {
         if (isStatic) return
@@ -67,13 +87,14 @@ function TrackPlayInner(props: TrackPlayProps) {
     return (
         <>
             <button
+                ref={button}
                 type="button"
                 disabled={!spotifyId}
                 aria-label={mine && state.playing ? `Pause ${label}` : `Play ${label}`}
                 aria-pressed={mine && state.playing}
                 onPointerEnter={() => setHover(true)}
                 onPointerLeave={() => setHover(false)}
-                onClick={() => spotifyId && requestPlay(spotifyId, label)}
+                onClick={() => spotifyId && requestPlay(spotifyId, label, pageQueue())}
                 style={{ ...props.style, position: "relative", display: "block", border: "none", padding: 0, margin: 0, background: "transparent", cursor: spotifyId ? "pointer" : "default", borderRadius: 14 }}
             >
                 <span

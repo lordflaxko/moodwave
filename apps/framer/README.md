@@ -9,8 +9,8 @@ paste it into the matching code file in the Framer project (or the other way rou
 | --- | --- | --- |
 | `MoodwaveAPI.tsx` | — | Shared client: `API_URL`, bearer-token session, types, design constants, `Collage` |
 | `Composer.tsx` | Home, `/create` | The prompt box; submits to `/create?prompt=…&auto=1` |
-| `Studio.tsx` | `/create` | Sign-in gate, generation with progress overlay, then opens the playlist |
-| `PlaylistView.tsx` | `/playlist?id=…` | Tracks with reasons, "make it more…", Spotify player, save to Spotify |
+| `Studio.tsx` | `/create` | Sign-in gate, generation with a live progress overlay (streams `POST /playlists/generate/stream`; falls back to `/generate`), then opens the playlist |
+| `PlaylistView.tsx` | `/playlist?id=…` | Tracks with reasons, "make it more…", Play all (queue), drag/Alt+↑↓ reorder, swap, remove with undo, inline rename, 👍/👎 feedback, save to Spotify |
 | `Library.tsx` | `/library` | Grid of your playlists |
 | `AccountChip.tsx` | Nav (layout template) | Spotify status, sign in / sign out |
 | `MobileMenu.tsx` | Nav, phone only | Burger + full-screen menu with the account status |
@@ -23,7 +23,7 @@ paste it into the matching code file in the Framer project (or the other way rou
 | `SpinRecord.tsx` | Home | Draggable record; lands on a mood and offers to compose it |
 | `RecordSleeve.tsx` | Artist cards | Record that slides out of the card on hover (reads `--sleeve`) |
 | `Waveform.tsx` | Home, layout template | Oscilloscope line reacting to the pointer and scroll speed |
-| `TrackPlay.tsx` | Showcase track rows | Click a row to play it in a shared Spotify player (iFrame API); bars show while playing. Needs each row's "Spotify ID" CMS field |
+| `TrackPlay.tsx` | Showcase track rows | Click a row to play it in a shared Spotify player (iFrame API); the other rows queue after it (⏮ ⏭, auto-advance). Needs each row's "Spotify ID" CMS field |
 | `MiniEq.tsx` | (unused) | Hover-only bars, replaced by `TrackPlay` |
 | `Overrides.tsx` | Cards, CTAs, nav, rows | `withTilt`, `withTiltGlare`, `withMagnetic`, `withSleeve`, `withTrackHover`, `withNavCondense` |
 

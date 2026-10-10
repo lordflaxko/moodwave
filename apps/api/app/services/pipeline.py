@@ -14,6 +14,7 @@ import asyncio
 import logging
 import math
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from rapidfuzz import fuzz
@@ -21,6 +22,7 @@ from rapidfuzz import fuzz
 from app.core.config import get_settings
 from app.schemas import Candidate, MusicalIntent, PlaylistStats, Track
 from app.services.ai.base import AIError, AIProvider
+from app.services.ai.claude import LISTENER_NOTES
 from app.services.ai.heuristic import HeuristicProvider
 from app.services.spotify.base import SpotifyClient, SpotifyError
 
@@ -80,9 +82,25 @@ def candidate_line(track: Track) -> str:
     return f"{track.title} — {track.artists[0] if track.artists else ''}"
 
 
-async def resolve(candidates: list[Candidate], spotify: SpotifyClient) -> list[Track]:
-    """Resolve candidates to verified Spotify tracks, preserving candidate order."""
+Progress = Callable[[dict], Awaitable[None]]
+
+
+async def resolve(
+    candidates: list[Candidate],
+    spotify: SpotifyClient,
+    on_result: Callable[[Track | None], Awaitable[None]] | None = None,
+) -> list[Track]:
+    """Resolve candidates to verified Spotify tracks, preserving candidate order.
+
+    `on_result` hears about each candidate as it finishes (the matched track, or None).
+    """
     semaphore = asyncio.Semaphore(_RESOLVE_CONCURRENCY)
+
+    async def report(candidate: Candidate) -> Track | None:
+        track = await one(candidate)
+        if on_result is not None:
+            await on_result(track)
+        return track
 
     async def one(candidate: Candidate) -> Track | None:
         async with semaphore:
@@ -98,7 +116,7 @@ async def resolve(candidates: list[Candidate], spotify: SpotifyClient) -> list[T
             return None
         return match.model_copy(update={"energy": candidate.energy, "reason": candidate.reason})
 
-    resolved = await asyncio.gather(*(one(c) for c in candidates))
+    resolved = await asyncio.gather(*(report(c) for c in candidates))
     return [track for track in resolved if track is not None]
 
 
@@ -175,6 +193,33 @@ class PlaylistPipeline:
         self.ai = ai
         self.spotify = spotify
         self.settings = get_settings()
+        self.avoid_ids: set[str] = set()
+        self.avoid_artists: list[str] = []
+        self.progress: Progress | None = None
+        self.notes: tuple[str, ...] = ()
+
+    def use_preferences(self, avoid_ids: set[str], avoid_artists: set[str], notes: list[str]) -> None:
+        """Steer picks with the listener's thumbs: drop disliked songs/artists, tell the AI the rest."""
+        self.avoid_ids = set(avoid_ids)
+        self.avoid_artists = sorted(avoid_artists)
+        self.notes = tuple(notes)
+
+    def _filter(self, tracks: list[Track], *args, **kwargs) -> list[Track]:
+        if self.avoid_ids or self.avoid_artists:
+            tracks = [
+                t
+                for t in tracks
+                if t.id not in self.avoid_ids and not (self.avoid_artists and credits(t, self.avoid_artists))
+            ]
+        return filter_tracks(tracks, *args, **kwargs)
+
+    async def _emit(self, event: dict) -> None:
+        if self.progress is None:
+            return
+        try:
+            await self.progress(event)
+        except Exception:  # a slow or closed listener must never break generation
+            log.debug("progress listener failed", exc_info=True)
 
     async def _with_fallback(self, label: str, call, fallback_call):
         """Run an AI call; if Claude fails, degrade to the heuristic curator with a notice."""
@@ -192,13 +237,13 @@ class PlaylistPipeline:
             return tracks
         try:
             more = await ai.more_candidates(intent, [candidate_line(t) for t in tracks], (target - len(tracks)) * 2)
-            tracks = filter_tracks(await resolve(more, self.spotify), intent, target, seed=tracks)
+            tracks = self._filter(await resolve(more, self.spotify), intent, target, seed=tracks)
         except AIError as exc:
             log.info("Backfill via AI skipped: %s", exc)
         if len(tracks) < target:
             extra = await self.spotify.discover(intent, {t.id for t in tracks}, (target - len(tracks)) * 2)
             extra = [t if t.energy is not None else t.model_copy(update={"energy": intent.energy}) for t in extra]
-            tracks = filter_tracks(extra, intent, target, seed=tracks)
+            tracks = self._filter(extra, intent, target, seed=tracks)
         return tracks
 
     async def _artist_catalog(self, intent: MusicalIntent, exclude: list[Track]) -> list[Track]:
@@ -240,7 +285,7 @@ class PlaylistPipeline:
                     log.info("Catalog pick via AI skipped: %s", exc)
                     picks = await HeuristicProvider().pick_from_catalog(intent, catalog, need)
                 chosen = [catalog[p.index].model_copy(update={"energy": p.energy, "reason": p.reason}) for p in picks]
-                tracks = filter_tracks(chosen, intent, target, seed=tracks)
+                tracks = self._filter(chosen, intent, target, seed=tracks)
 
         artist_count = len(tracks)
         if len(tracks) < target:
@@ -264,7 +309,7 @@ class PlaylistPipeline:
                 for t in similar
                 if not credits(t, intent.focus_artists)
             ]
-            tracks = filter_tracks(tagged, intent, target, seed=tracks, allow_similar=True)
+            tracks = self._filter(tagged, intent, target, seed=tracks, allow_similar=True)
 
         added = len(tracks) - artist_count
         if not added:
@@ -277,6 +322,8 @@ class PlaylistPipeline:
     async def generate(
         self, prompt: str, *, target: int, energy: float | None, allow_explicit: bool, use_my_taste: bool
     ) -> GenerationResult:
+        LISTENER_NOTES.set(self.notes)
+        await self._emit({"type": "stage", "stage": "planning"})
         taste = await self.spotify.top_artists() if use_my_taste else []
 
         async def run(ai: AIProvider):
@@ -286,8 +333,30 @@ class PlaylistPipeline:
 
         plan, source, notice = await self._with_fallback("plan", run, run)
         ai_for_backfill = self.ai if source == self.ai.source else HeuristicProvider()
+        await self._emit(
+            {"type": "intent", "title": plan.intent.title, "moods": plan.intent.moods[:4], "energy": plan.intent.energy}
+        )
 
-        tracks = filter_tracks(await resolve(plan.candidates, self.spotify), plan.intent, target)
+        total, done = len(plan.candidates), 0
+
+        async def verified(track: Track | None) -> None:
+            nonlocal done
+            done += 1
+            await self._emit({"type": "verifying", "done": done, "total": total})
+            if track is not None:
+                await self._emit(
+                    {
+                        "type": "track",
+                        "title": track.title,
+                        "artist": track.artists[0] if track.artists else "",
+                        "cover": track.image_url,
+                    }
+                )
+
+        resolved = await resolve(plan.candidates, self.spotify, verified if self.progress else None)
+        tracks = self._filter(resolved, plan.intent, target)
+        if len(tracks) < target:
+            await self._emit({"type": "stage", "stage": "filling", "have": len(tracks), "target": target})
         if plan.intent.focus_artists:
             tracks, focus_notice = await self._focus_fill(tracks, plan.intent, target, ai_for_backfill)
             if focus_notice:
@@ -295,6 +364,7 @@ class PlaylistPipeline:
         else:
             tracks = await self._backfill(tracks, plan.intent, target, ai_for_backfill)
 
+        await self._emit({"type": "stage", "stage": "finishing", "have": len(tracks)})
         tracks = await self.spotify.attach_artist_images(tracks)
         if len(tracks) < self.settings.min_tracks:
             notice = (notice + " " if notice else "") + (
@@ -303,6 +373,8 @@ class PlaylistPipeline:
         return GenerationResult(intent=plan.intent, tracks=tracks, source=source, notice=notice)
 
     async def refine(self, intent: MusicalIntent, tracks: list[Track], instruction: str) -> RefinementResult:
+        LISTENER_NOTES.set(self.notes)
+
         async def run(ai: AIProvider):
             return await ai.refine(intent, tracks, instruction)
 
@@ -313,7 +385,7 @@ class PlaylistPipeline:
 
         resolved = await resolve(plan.candidates, self.spotify)
         # Validate new songs against everything that stays, then slot them into removed positions.
-        fresh = filter_tracks(resolved, plan.intent, len(kept) + len(resolved), seed=kept)[len(kept) :]
+        fresh = self._filter(resolved, plan.intent, len(kept) + len(resolved), seed=kept)[len(kept) :]
         fresh = [t for t in fresh if t.id not in {x.id for x in tracks}]
 
         merged: list[Track] = []
@@ -349,6 +421,7 @@ class PlaylistPipeline:
         )
 
     async def replace_track(self, intent: MusicalIntent, tracks: list[Track], track_id: str) -> list[Track]:
+        LISTENER_NOTES.set(self.notes)
         index = next((i for i, t in enumerate(tracks) if t.id == track_id), None)
         if index is None:
             raise ValueError("Track not found in playlist")
@@ -361,15 +434,15 @@ class PlaylistPipeline:
         alternatives, _, _ = await self._with_fallback("replace", run, run)
         others = [t for t in tracks if t.id != track_id]
         resolved = await resolve(alternatives, self.spotify)
-        pick = filter_tracks(resolved, intent, len(others) + 1, seed=others)[len(others) :]
+        pick = self._filter(resolved, intent, len(others) + 1, seed=others)[len(others) :]
         if not pick and intent.focus_artists:
             catalog = await self._artist_catalog(intent, tracks)
             energy = target.energy if target.energy is not None else intent.energy
             catalog.sort(key=lambda t: abs((t.energy if t.energy is not None else energy) - energy))
-            pick = filter_tracks(catalog, intent, len(others) + 1, seed=others)[len(others) :]
+            pick = self._filter(catalog, intent, len(others) + 1, seed=others)[len(others) :]
         if not pick:
             discovered = await self.spotify.discover(intent, {t.id for t in tracks}, 6)
-            pick = filter_tracks(
+            pick = self._filter(
                 discovered, intent, len(others) + 1, seed=others, allow_similar=bool(intent.focus_artists)
             )[len(others) :]
         if not pick:

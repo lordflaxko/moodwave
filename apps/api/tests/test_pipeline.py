@@ -268,3 +268,38 @@ async def test_demo_artist_only_playlist_then_refine_keeps_focus():
     refined = await pipeline.refine(result.intent, result.tracks, "make it more upbeat")
     assert refined.intent.focus_artists == ["Frank Ocean"]
     assert all(credits(t, ["Frank Ocean"]) or t.similar for t in refined.tracks)
+
+
+async def test_pipeline_avoids_thumbed_down_songs_and_artists():
+    pipeline = PlaylistPipeline(HeuristicProvider(), MockSpotifyClient("u"))
+    first = await pipeline.generate(
+        "rainy night drive", target=15, energy=None, allow_explicit=True, use_my_taste=False
+    )
+    banned_track = first.tracks[0]
+    banned_artist = first.tracks[1].artists[0]
+    pipeline.use_preferences({banned_track.id}, {banned_artist}, ["Artists to avoid: " + banned_artist])
+    again = await pipeline.generate(
+        "rainy night drive", target=15, energy=None, allow_explicit=True, use_my_taste=False
+    )
+    assert banned_track.id not in {t.id for t in again.tracks}
+    assert not any(banned_artist in t.artists for t in again.tracks)
+
+
+async def test_generate_reports_progress_in_order():
+    events: list[dict] = []
+
+    async def listen(event: dict) -> None:
+        events.append(event)
+
+    pipeline = PlaylistPipeline(HeuristicProvider(), MockSpotifyClient("u"))
+    pipeline.progress = listen
+    result = await pipeline.generate(
+        "sunday morning coffee", target=15, energy=None, allow_explicit=True, use_my_taste=False
+    )
+    kinds = [e["type"] for e in events]
+    assert kinds[0] == "stage" and kinds[1] == "intent"
+    assert events[1]["title"] == result.intent.title
+    verifying = [e for e in events if e["type"] == "verifying"]
+    assert verifying and verifying[-1]["done"] == verifying[-1]["total"]
+    assert any(e["type"] == "track" for e in events)
+    assert events[-1] == {"type": "stage", "stage": "finishing", "have": len(result.tracks)}
