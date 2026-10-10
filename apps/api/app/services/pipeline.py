@@ -16,6 +16,7 @@ import math
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from rapidfuzz import fuzz
 
@@ -25,6 +26,9 @@ from app.services.ai.base import AIError, AIProvider
 from app.services.ai.claude import LISTENER_NOTES
 from app.services.ai.heuristic import HeuristicProvider
 from app.services.spotify.base import SpotifyClient, SpotifyError
+
+if TYPE_CHECKING:
+    from app.services.seed import Seed
 
 log = logging.getLogger(__name__)
 
@@ -320,7 +324,14 @@ class PlaylistPipeline:
         )
 
     async def generate(
-        self, prompt: str, *, target: int, energy: float | None, allow_explicit: bool, use_my_taste: bool
+        self,
+        prompt: str,
+        *,
+        target: int,
+        energy: float | None,
+        allow_explicit: bool,
+        use_my_taste: bool,
+        seed: "Seed | None" = None,
     ) -> GenerationResult:
         LISTENER_NOTES.set(self.notes)
         await self._emit({"type": "stage", "stage": "planning"})
@@ -328,7 +339,12 @@ class PlaylistPipeline:
 
         async def run(ai: AIProvider):
             return await ai.plan(
-                prompt, target=target, energy_override=energy, allow_explicit=allow_explicit, taste_artists=taste
+                prompt,
+                target=target,
+                energy_override=energy,
+                allow_explicit=allow_explicit,
+                taste_artists=taste,
+                seeds=seed.lines if seed else None,
             )
 
         plan, source, notice = await self._with_fallback("plan", run, run)
@@ -354,6 +370,13 @@ class PlaylistPipeline:
                 )
 
         resolved = await resolve(plan.candidates, self.spotify, verified if self.progress else None)
+        if seed is not None:
+            # Seed songs aren't repeated; a single seed song opens the playlist.
+            seed_ids = {t.id for t in seed.tracks}
+            resolved = [t for t in resolved if t.id not in seed_ids]
+            if seed.lead is not None and (plan.intent.explicit_allowed or not seed.lead.explicit):
+                lead = seed.lead.model_copy(update={"reason": "The song you started from."})
+                resolved = [lead, *resolved]
         tracks = self._filter(resolved, plan.intent, target)
         if len(tracks) < target:
             await self._emit({"type": "stage", "stage": "filling", "have": len(tracks), "target": target})

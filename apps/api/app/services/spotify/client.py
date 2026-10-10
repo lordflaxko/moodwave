@@ -6,6 +6,7 @@ relies on search, profile, top items and playlist endpoints.
 """
 
 import asyncio
+import base64
 import logging
 import random
 from collections.abc import Awaitable, Callable
@@ -68,12 +69,13 @@ class SpotifyHttpClient:
         self._market = get_settings().spotify_market
         self._me: dict | None = None
 
-    async def _request(self, method: str, path: str, **kwargs: Any) -> Any:
+    async def _request(self, method: str, path: str, *, headers: dict[str, str] | None = None, **kwargs: Any) -> Any:
         token = await self._token_provider()
         url = path if path.startswith("http") else f"{API}{path}"
+        sent = {"Authorization": f"Bearer {token}", **(headers or {})}
         async with httpx.AsyncClient(timeout=15) as client:
             for attempt in range(_MAX_RETRIES + 1):
-                response = await client.request(method, url, headers={"Authorization": f"Bearer {token}"}, **kwargs)
+                response = await client.request(method, url, headers=sent, **kwargs)
                 if response.status_code == 429 and attempt < _MAX_RETRIES:
                     delay = float(response.headers.get("Retry-After", "1"))
                     await asyncio.sleep(min(delay, 5) + random.random() * 0.3)
@@ -89,7 +91,21 @@ class SpotifyHttpClient:
         if response.status_code >= 400:
             log.warning("Spotify %s %s -> %s %s", method, path, response.status_code, response.text[:200])
             raise SpotifyError(f"Spotify request failed ({response.status_code})", status=response.status_code)
-        return response.json() if response.content else None
+        if not response.content:
+            return None
+        try:
+            return response.json()
+        except ValueError:
+            return None
+
+    async def _items(self, method: str, playlist_id: str, **kwargs: Any) -> Any:
+        """Playlist items endpoint (newer `/items`, falling back to the older `/tracks`)."""
+        try:
+            return await self._request(method, f"/playlists/{playlist_id}/items", **kwargs)
+        except SpotifyError as exc:
+            if exc.status not in (403, 404, 405):
+                raise
+            return await self._request(method, f"/playlists/{playlist_id}/tracks", **kwargs)
 
     async def _search_tracks(self, q: str, limit: int = _SEARCH_LIMIT, offset: int = 0) -> list[Track]:
         data = await self._request(
@@ -200,14 +216,37 @@ class SpotifyHttpClient:
             me = await self.me()
             playlist = await self._request("POST", f"/users/{me['id']}/playlists", json=body)
         for start in range(0, len(uris), 100):
-            chunk = {"uris": uris[start : start + 100]}
-            try:
-                await self._request("POST", f"/playlists/{playlist['id']}/items", json=chunk)
-            except SpotifyError as exc:
-                if exc.status not in (403, 404, 405):
-                    raise
-                await self._request("POST", f"/playlists/{playlist['id']}/tracks", json=chunk)
+            await self._items("POST", playlist["id"], json={"uris": uris[start : start + 100]})
         return SavedPlaylist(id=playlist["id"], url=(playlist.get("external_urls") or {}).get("spotify"))
+
+    async def set_cover(self, playlist_id: str, jpeg: bytes) -> None:
+        await self._request(
+            "PUT",
+            f"/playlists/{playlist_id}/images",
+            content=base64.b64encode(jpeg),
+            headers={"Content-Type": "image/jpeg"},
+        )
+
+    async def replace_playlist(self, playlist_id: str, name: str, description: str, uris: list[str]) -> None:
+        await self._request(
+            "PUT", f"/playlists/{playlist_id}", json={"name": name[:100], "description": description[:300]}
+        )
+        # PUT replaces everything with the first 100; the rest are appended in order.
+        await self._items("PUT", playlist_id, json={"uris": uris[:100]})
+        for start in range(100, len(uris), 100):
+            await self._items("POST", playlist_id, json={"uris": uris[start : start + 100]})
+
+    async def get_track(self, track_id: str) -> Track:
+        return parse_track(await self._request("GET", f"/tracks/{track_id}", params={"market": self._market}))
+
+    async def playlist_tracks(self, playlist_id: str, limit: int = 50) -> list[Track]:
+        data = await self._items("GET", playlist_id, params={"limit": min(limit, 50), "market": self._market})
+        tracks = []
+        for row in (data or {}).get("items", []):
+            item = (row or {}).get("item") or (row or {}).get("track")
+            if item and item.get("id") and item.get("type", "track") == "track":
+                tracks.append(parse_track(item))
+        return tracks
 
     async def list_playlists(self, limit: int = 30) -> list[SpotifyPlaylistOut]:
         data = await self._request("GET", "/me/playlists", params={"limit": min(limit, 50)})

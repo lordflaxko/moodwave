@@ -28,6 +28,7 @@ class AIProvider(Protocol):
         energy_override: float | None,
         allow_explicit: bool,
         taste_artists: list[str],
+        seeds: list[str] | None = None,
     ) -> PlaylistPlan:
         """Interpret a prompt into a musical intent plus candidate songs."""
         ...

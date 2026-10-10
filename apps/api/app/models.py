@@ -45,6 +45,8 @@ class Playlist(SQLModel, table=True):
     ai_source: str = "heuristic"
     spotify_playlist_id: str | None = None
     spotify_url: str | None = None
+    # When the Spotify copy last matched this playlist (save or sync).
+    synced_at: datetime | None = None
     created_at: datetime = Field(default_factory=_now, index=True)
     updated_at: datetime = Field(default_factory=_now)
 

@@ -96,8 +96,9 @@ class ClaudeProvider:
         energy_override: float | None,
         allow_explicit: bool,
         taste_artists: list[str],
+        seeds: list[str] | None = None,
     ) -> PlaylistPlan:
-        message = prompts.plan_message(prompt, target, energy_override, allow_explicit, taste_artists)
+        message = prompts.plan_message(prompt, target, energy_override, allow_explicit, taste_artists, seeds or [])
         data = await self._structured(message, prompts.PLAN_SCHEMA, self._settings.anthropic_effort)
         try:
             intent = MusicalIntent(**_normalize_intent(data["intent"]))

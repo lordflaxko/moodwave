@@ -8,7 +8,7 @@ import {
     type CSSProperties,
 } from "react"
 
-import { Safe } from "./MoodwaveAPI.tsx"
+import { Safe, useSession } from "./MoodwaveAPI.tsx"
 
 /** Accent at an opacity; works for hex, rgb() or hsl() values from the colour control. */
 const mix = (color: string, amount: string) => `color-mix(in srgb, ${color} ${amount}, transparent)`
@@ -35,6 +35,18 @@ const ENERGY: { key: EnergyKey; label: string; value: number | null }[] = [
     { key: "lift", label: "Lift", value: 0.68 },
     { key: "peak", label: "Peak", value: 0.9 },
 ]
+
+// A pasted Spotify song or playlist link becomes the seed ("start from this").
+const SPOTIFY_LINK = /(?:https?:\/\/)?open\.spotify\.com\/(?:intl-[a-z-]+\/)?(track|playlist)\/[A-Za-z0-9]+(?:\?\S*)?|spotify:(track|playlist):[A-Za-z0-9]+/i
+const TASTE_KEY = "mw_blend_taste"
+
+function readTaste(): boolean {
+    try {
+        return window.localStorage.getItem(TASTE_KEY) === "1"
+    } catch {
+        return false
+    }
+}
 
 const MIN_SONGS = 15
 const MAX_SONGS = 100
@@ -200,14 +212,41 @@ function ComposerInner(props: ComposerProps) {
     const [focused, setFocused] = useState(false)
     const [length, setLength] = useState(25)
     const [energy, setEnergy] = useState<EnergyKey>("auto")
+    const [seed, setSeed] = useState<{ url: string; kind: string } | null>(null)
+    const [taste, setTaste] = useState(false)
+    const session = useSession(!isStatic)
+    const canBlend = Boolean(session.user && !session.user.is_demo)
     const typed = useTypewriter(phrases, !isStatic && !value && !focused)
-    const ready = value.trim().length >= 3
+    const ready = value.trim().length >= 3 || Boolean(seed)
+
+    useEffect(() => setTaste(readTaste()), [])
+
+    const toggleTaste = () => {
+        const next = !taste
+        setTaste(next)
+        try {
+            window.localStorage.setItem(TASTE_KEY, next ? "1" : "0")
+        } catch {
+            // Storage blocked: the choice lasts for this page.
+        }
+    }
+
+    /** Pull a Spotify link out of the text into the seed chip. */
+    const takeLink = (text: string) => {
+        const match = text.match(SPOTIFY_LINK)
+        if (!match) return text
+        const url = match[0].startsWith("spotify:") || match[0].startsWith("http") ? match[0] : `https://${match[0]}`
+        setSeed({ url, kind: (match[1] || match[2] || "track").toLowerCase() })
+        return text.replace(match[0], "").replace(/\s{2,}/g, " ").trimStart()
+    }
 
     // On the studio page, show the prompt you arrived with (after mount, so hydration matches).
     useEffect(() => {
         const params = new URLSearchParams(window.location.search)
         const prompt = params.get("prompt")
         if (prompt) setValue(prompt.slice(0, 500))
+        const seedUrl = params.get("seed")
+        if (seedUrl) takeLink(seedUrl)
         // Arriving from the energy mixer: preset the nearest energy level.
         const level = Number(params.get("energy"))
         if (params.get("energy") !== null && Number.isFinite(level)) {
@@ -225,9 +264,12 @@ function ComposerInner(props: ComposerProps) {
 
     function submit() {
         if (!ready || typeof window === "undefined") return
-        const params = new URLSearchParams({ prompt: value.trim(), auto: "1", length: String(length) })
+        const prompt = value.trim().length >= 3 ? value.trim() : "More like this"
+        const params = new URLSearchParams({ prompt, auto: "1", length: String(length) })
         const level = ENERGY.find((e) => e.key === energy)?.value
         if (level != null) params.set("energy", String(level))
+        if (seed) params.set("seed", seed.url)
+        if (canBlend && taste) params.set("taste", "1")
         window.location.href = `${target}?${params.toString()}`
     }
 
@@ -307,7 +349,7 @@ function ComposerInner(props: ComposerProps) {
                         rows={2}
                         maxLength={500}
                         onChange={(e) => {
-                            const next = e.target.value
+                            const next = takeLink(e.target.value)
                             startTransition(() => setValue(next))
                         }}
                         onFocus={() => setFocused(true)}
@@ -357,8 +399,10 @@ function ComposerInner(props: ComposerProps) {
                                 overflow: "hidden",
                             }}
                         >
-                            {focused ? (
-                                "Describe a moment, a feeling, or a place…"
+                            {seed ? (
+                                "Add a mood, or just press Compose…"
+                            ) : focused ? (
+                                "Describe a moment, a feeling, or a place — or paste a Spotify link…"
                             ) : (
                                 <>
                                     <span style={{ fontStyle: "italic", color: "#8a847c" }}>{placeholderLead} </span>
@@ -369,6 +413,18 @@ function ComposerInner(props: ComposerProps) {
                         </div>
                     ) : null}
                 </div>
+
+                {seed ? (
+                    <div style={{ padding: "0 20px 10px" }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, height: 30, padding: "0 6px 0 12px", borderRadius: 100, background: mix(accent, "14%"), border: `1px solid ${mix(accent, "40%")}`, color: "#f2efe9", fontFamily: SANS, fontSize: 13 }}>
+                            <span style={{ width: 7, height: 7, borderRadius: 7, background: "#1ed760" }} />
+                            Starting from a Spotify {seed.kind === "playlist" ? "playlist" : "song"}
+                            <button type="button" aria-label="Remove the Spotify link" onClick={() => setSeed(null)} style={{ width: 22, height: 22, borderRadius: 22, border: "none", background: "rgba(242,239,233,0.08)", color: "#f2efe9", cursor: "pointer", lineHeight: 1 }}>
+                                ×
+                            </button>
+                        </span>
+                    </div>
+                ) : null}
 
                 <div
                     style={{
@@ -383,6 +439,21 @@ function ComposerInner(props: ComposerProps) {
                 >
                     <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
                         <LengthField value={length} onChange={setLength} pill={pill} />
+                        {canBlend ? (
+                            <button
+                                type="button"
+                                role="switch"
+                                aria-checked={taste}
+                                onClick={toggleTaste}
+                                title="Lightly mix in the artists you listen to most on Spotify"
+                                style={{ ...pill, borderColor: taste ? mix(accent, "55%") : "rgba(242, 239, 233, 0.13)", color: taste ? "#f2efe9" : "#8a847c", background: taste ? mix(accent, "12%") : "transparent" }}
+                            >
+                                <span aria-hidden style={{ position: "relative", width: 24, height: 14, borderRadius: 14, background: taste ? accent : "rgba(242,239,233,0.14)", transition: "background 0.25s ease" }}>
+                                    <span style={{ position: "absolute", top: 2, left: taste ? 12 : 2, width: 10, height: 10, borderRadius: 10, background: taste ? "#0b0a0d" : "#8a847c", transition: "left 0.25s ease" }} />
+                                </span>
+                                Blend my taste
+                            </button>
+                        ) : null}
                         <div role="radiogroup" aria-label="Energy" style={{ display: "flex", borderRadius: 100, background: "rgba(242,239,233,0.04)", padding: 3 }}>
                             {ENERGY.map((e) => {
                                 const active = e.key === energy

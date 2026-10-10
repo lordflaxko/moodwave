@@ -492,6 +492,7 @@ class HeuristicProvider:
         energy_override: float | None,
         allow_explicit: bool,
         taste_artists: list[str],
+        seeds: list[str] | None = None,
     ) -> PlaylistPlan:
         intent = interpret(prompt, energy_override=energy_override, allow_explicit=allow_explicit)
         if intent.focus_artists:

@@ -22,6 +22,8 @@ SCOPES = " ".join(
         "playlist-read-private",
         "playlist-modify-private",
         "playlist-modify-public",
+        # Custom playlist covers on save.
+        "ugc-image-upload",
     ]
 )
 _REFRESH_MARGIN = timedelta(seconds=60)

@@ -514,7 +514,21 @@ function PlaylistViewInner(props: PlaylistViewProps) {
         try {
             const next = await api<Playlist>(`/playlists/${playlist.id}/save`, { method: "POST" })
             setPlaylist(next)
-            setFlash("Saved to your Spotify.")
+            setFlash(next.notice ?? "Saved to your Spotify — with its own cover.")
+        } catch (e) {
+            setFlash((e as Error).message)
+        } finally {
+            setBusy(null)
+        }
+    }
+
+    const sync = async () => {
+        if (!playlist || busy) return
+        setBusy("sync")
+        try {
+            const next = await api<Playlist>(`/playlists/${playlist.id}/sync`, { method: "POST" })
+            setPlaylist(next)
+            setFlash(next.notice ?? "Your Spotify copy is up to date.")
         } catch (e) {
             setFlash((e as Error).message)
         } finally {
@@ -679,9 +693,28 @@ function PlaylistViewInner(props: PlaylistViewProps) {
                         ) : null}
                         {canSave ? (
                             playlist.spotify_url ? (
-                                <a href={playlist.spotify_url} target="_blank" rel="noreferrer" style={{ ...pill, background: C.text, color: C.ink, border: "none", textDecoration: "none", fontWeight: 500, height: 42, padding: "0 18px" }}>
-                                    <span style={{ width: 8, height: 8, borderRadius: 8, background: "#1ed760" }} /> Open in Spotify
-                                </a>
+                                <>
+                                    <a href={playlist.spotify_url} target="_blank" rel="noreferrer" style={{ ...pill, background: C.text, color: C.ink, border: "none", textDecoration: "none", fontWeight: 500, height: 42, padding: "0 18px" }}>
+                                        <span style={{ width: 8, height: 8, borderRadius: 8, background: "#1ed760" }} /> Open in Spotify
+                                    </a>
+                                    <AnimatePresence>
+                                        {playlist.needs_sync || busy === "sync" ? (
+                                            <motion.button
+                                                key="sync"
+                                                type="button"
+                                                onClick={sync}
+                                                disabled={Boolean(busy)}
+                                                initial={{ opacity: 0, scale: 0.9 }}
+                                                animate={{ opacity: 1, scale: 1 }}
+                                                exit={{ opacity: 0, scale: 0.9 }}
+                                                title="You've changed this playlist since saving it"
+                                                style={{ ...pill, height: 42, padding: "0 16px", color: C.text, borderColor: `color-mix(in srgb, ${accent} 55%, transparent)` }}
+                                            >
+                                                <span style={{ width: 6, height: 6, borderRadius: 6, background: accent }} /> {busy === "sync" ? "Updating…" : "Update on Spotify"}
+                                            </motion.button>
+                                        ) : null}
+                                    </AnimatePresence>
+                                </>
                             ) : (
                                 <button type="button" onClick={save} disabled={Boolean(busy)} style={{ ...pill, background: C.text, color: C.ink, border: "none", fontWeight: 500, height: 42, padding: "0 18px", opacity: busy && busy !== "save" ? 0.5 : 1 }}>
                                     <span style={{ width: 8, height: 8, borderRadius: 8, background: "#1ed760" }} /> {busy === "save" ? "Saving…" : "Save to Spotify"}

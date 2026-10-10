@@ -89,6 +89,9 @@ class GenerateRequest(BaseModel):
     energy: float | None = Field(default=None, ge=0, le=1, description="Optional energy override")
     allow_explicit: bool = True
     use_my_taste: bool = False
+    seed_url: str | None = Field(
+        default=None, max_length=300, description="A Spotify song or playlist link to start from"
+    )
 
 
 class RefineRequest(BaseModel):
@@ -142,6 +145,9 @@ class PlaylistOut(BaseModel):
     notice: str | None = None
     created_at: datetime
     updated_at: datetime
+    synced_at: datetime | None = None
+    # Saved to Spotify, then edited here since: offer "Update on Spotify".
+    needs_sync: bool = False
 
 
 class PlaylistSummary(BaseModel):

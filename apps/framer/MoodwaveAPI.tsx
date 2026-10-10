@@ -99,6 +99,10 @@ export interface Playlist {
     spotify_url: string | null
     notice?: string | null
     created_at: string
+    updated_at?: string
+    synced_at?: string | null
+    /** Saved to Spotify, then edited here since. */
+    needs_sync?: boolean
 }
 export interface PlaylistSummary {
     id: string
@@ -119,6 +123,8 @@ export interface GenerateInput {
     energy: number | null
     allow_explicit: boolean
     use_my_taste: boolean
+    /** A Spotify song or playlist link to start from. */
+    seed_url?: string | null
 }
 
 // --- Token ------------------------------------------------------------------------------

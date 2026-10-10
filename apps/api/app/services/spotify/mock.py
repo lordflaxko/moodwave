@@ -7,11 +7,12 @@ from rapidfuzz import fuzz
 
 from app.data.catalog import CATALOG
 from app.schemas import MusicalIntent, SpotifyPlaylistOut, Track
-from app.services.spotify.base import SavedPlaylist
+from app.services.spotify.base import SavedPlaylist, SpotifyError
 from app.services.spotify.catalog_scoring import rank_catalog, row_to_track
 
 # Playlists "saved to Spotify" in demo mode live in memory for the process lifetime.
 _DEMO_SAVED: dict[str, list[SpotifyPlaylistOut]] = defaultdict(list)
+DEMO_COVERS: dict[str, bytes] = {}
 
 
 class MockSpotifyClient:
@@ -68,3 +69,22 @@ class MockSpotifyClient:
 
     async def list_playlists(self, limit: int = 30) -> list[SpotifyPlaylistOut]:
         return _DEMO_SAVED[self.user_id][:limit]
+
+    async def set_cover(self, playlist_id: str, jpeg: bytes) -> None:
+        DEMO_COVERS[playlist_id] = jpeg
+
+    async def replace_playlist(self, playlist_id: str, name: str, description: str, uris: list[str]) -> None:
+        for saved in _DEMO_SAVED[self.user_id]:
+            if saved.id == playlist_id:
+                saved.name, saved.track_count = name, len(uris)
+
+    async def get_track(self, track_id: str) -> Track:
+        for row in CATALOG:
+            track = row_to_track(row)
+            if track.id == track_id:
+                return track
+        raise SpotifyError("That song isn't in the demo catalog.", status=404)
+
+    async def playlist_tracks(self, playlist_id: str, limit: int = 50) -> list[Track]:
+        # Any playlist link in demo mode reads as a handful of catalog songs.
+        return [row_to_track(row) for row in CATALOG[:: max(1, len(CATALOG) // limit)]][:limit]

@@ -111,7 +111,12 @@ CANDIDATES_ONLY_SCHEMA = {
 
 
 def plan_message(
-    prompt: str, target: int, energy_override: float | None, allow_explicit: bool, taste: list[str]
+    prompt: str,
+    target: int,
+    energy_override: float | None,
+    allow_explicit: bool,
+    taste: list[str],
+    seeds: list[str] | None = None,
 ) -> str:
     lines = [
         f"<request>{prompt}</request>",
@@ -124,6 +129,13 @@ def plan_message(
     if taste:
         lines.append(
             "Listener's top artists (light personalization only; don't let them dominate): " + ", ".join(taste[:10])
+        )
+    if seeds:
+        lines.append(
+            "<seed_songs>\n" + "\n".join(seeds[:15]) + "\n</seed_songs>\n"
+            "The listener started from these songs: match their sound, era and feel, and use their artists as "
+            "reference_artists. Don't repeat the seed songs and don't set focus_artists unless the request asks "
+            "for only certain artists."
         )
     return "\n".join(lines)
 

@@ -86,7 +86,8 @@ function liveProgress(live: Live, elapsed: number): number {
 
 function readRequest(): GenerateInput | null {
     const params = new URLSearchParams(window.location.search)
-    const prompt = params.get("prompt")?.trim()
+    const seedUrl = params.get("seed")?.trim() || null
+    const prompt = params.get("prompt")?.trim() || (seedUrl ? "More like this" : "")
     if (params.get("auto") !== "1" || !prompt || prompt.length < 3) return null
     const rawLength = params.get("length")
     const rawEnergy = params.get("energy")
@@ -97,14 +98,15 @@ function readRequest(): GenerateInput | null {
         length: Number.isFinite(length) ? Math.min(100, Math.max(15, Math.round(length))) : 25,
         energy: Number.isFinite(energy) && energy >= 0 && energy <= 1 ? energy : null,
         allow_explicit: true,
-        use_my_taste: false,
+        use_my_taste: params.get("taste") === "1",
+        seed_url: seedUrl ? seedUrl.slice(0, 300) : null,
     }
 }
 
 /** Drop the trigger so a refresh doesn't compose a second playlist (the prompt stays). */
 function clearTrigger() {
     const url = new URL(window.location.href)
-    for (const key of ["auto", "length", "energy"]) url.searchParams.delete(key)
+    for (const key of ["auto", "length", "energy", "taste"]) url.searchParams.delete(key)
     history.replaceState(null, "", url.pathname + url.search)
 }
 

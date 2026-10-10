@@ -246,3 +246,48 @@ def test_generate_stream_reports_errors(demo_client):
     with demo_client.stream("POST", "/playlists/generate/stream", json={"prompt": "x" * 5, "length": 15}) as res:
         events = [json.loads(line[6:]) for line in res.iter_lines() if line.startswith("data: ")]
     assert events[-1]["type"] in ("done", "error")
+
+
+def _make_playlist(client) -> dict:
+    res = client.post("/playlists/generate", json={"prompt": "warm evening jazz", "length": 15})
+    assert res.status_code == 201
+    return res.json()
+
+
+def test_save_then_edit_marks_out_of_sync_until_synced(demo_client):
+    playlist = _make_playlist(demo_client)
+    saved = demo_client.post(f"/playlists/{playlist['id']}/save").json()
+    assert saved["spotify_playlist_id"] and saved["synced_at"] and saved["needs_sync"] is False
+
+    import time
+
+    time.sleep(1.1)
+    edited = demo_client.put(f"/playlists/{playlist['id']}/tracks", json={"tracks": saved["tracks"][1:]}).json()
+    assert edited["needs_sync"] is True
+    synced = demo_client.post(f"/playlists/{playlist['id']}/sync").json()
+    assert synced["needs_sync"] is False
+
+
+def test_sync_requires_saved_playlist(demo_client):
+    playlist = _make_playlist(demo_client)
+    assert demo_client.post(f"/playlists/{playlist['id']}/sync").status_code == 409
+
+
+def test_generate_from_song_link_opens_with_it(demo_client):
+    from app.data.catalog import CATALOG
+    from app.services.spotify.catalog_scoring import row_to_track
+
+    seed = row_to_track(CATALOG[0])
+    res = demo_client.post(
+        "/playlists/generate",
+        json={"prompt": "more like this", "length": 15, "seed_url": f"https://open.spotify.com/track/{seed.id}?si=x"},
+    )
+    assert res.status_code == 201, res.text
+    assert res.json()["tracks"][0]["id"] == seed.id
+
+
+def test_generate_rejects_bad_seed_link(demo_client):
+    res = demo_client.post(
+        "/playlists/generate", json={"prompt": "more like this", "length": 15, "seed_url": "https://example.com/x"}
+    )
+    assert res.status_code == 422

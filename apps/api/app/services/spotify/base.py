@@ -52,3 +52,19 @@ class SpotifyClient(Protocol):
     async def create_playlist(self, name: str, description: str, uris: list[str]) -> SavedPlaylist: ...
 
     async def list_playlists(self, limit: int = 30) -> list[SpotifyPlaylistOut]: ...
+
+    async def set_cover(self, playlist_id: str, jpeg: bytes) -> None:
+        """Upload a custom cover (JPEG, <256 KB once base64-encoded). Needs `ugc-image-upload`."""
+        ...
+
+    async def replace_playlist(self, playlist_id: str, name: str, description: str, uris: list[str]) -> None:
+        """Make an existing Spotify playlist match: details and the full ordered item list."""
+        ...
+
+    async def get_track(self, track_id: str) -> Track:
+        """One track by id (for "start from a song")."""
+        ...
+
+    async def playlist_tracks(self, playlist_id: str, limit: int = 50) -> list[Track]:
+        """A playlist's tracks (for "start from a playlist"). Spotify-made playlists raise 403/404."""
+        ...

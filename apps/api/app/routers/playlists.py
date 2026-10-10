@@ -28,7 +28,9 @@ from app.schemas import (
     UpdatePlaylistRequest,
 )
 from app.services.ai.base import AIError
+from app.services.cover import build_cover
 from app.services.pipeline import PlaylistPipeline, compute_stats
+from app.services.seed import load_seed
 from app.services.spotify.base import SpotifyClient, SpotifyError
 from app.services.spotify.catalog_scoring import CATALOG_BY_ID, artist_image_map, artwork_map
 
@@ -104,7 +106,44 @@ def _to_out(playlist: Playlist, notice: str | None = None) -> PlaylistOut:
         notice=notice,
         created_at=playlist.created_at,
         updated_at=playlist.updated_at,
+        synced_at=playlist.synced_at,
+        needs_sync=_needs_sync(playlist),
     )
+
+
+def _aware(value: datetime) -> datetime:
+    return value if value.tzinfo else value.replace(tzinfo=UTC)
+
+
+def _needs_sync(playlist: Playlist) -> bool:
+    if not playlist.spotify_playlist_id or playlist.synced_at is None:
+        return False
+    return (_aware(playlist.updated_at) - _aware(playlist.synced_at)).total_seconds() > 1
+
+
+def _spotify_description(playlist: Playlist) -> str:
+    return f"{playlist.description} Made with Moodwave from: “{playlist.prompt}”"
+
+
+async def _apply_cover(spotify: SpotifyClient, spotify_id: str, tracks: list[Track]) -> str | None:
+    """Upload the grid cover. Never fails the save; returns a notice when the cover couldn't be set."""
+    if spotify.is_demo:
+        return None
+    try:
+        jpeg = await build_cover(tracks)
+        if jpeg:
+            await spotify.set_cover(spotify_id, jpeg)
+        return None
+    except SpotifyError as exc:
+        log.info("Cover upload failed: %s", exc)
+        if exc.status in (401, 403):
+            return (
+                "Saved. To add Moodwave's custom cover too, sign in with Spotify again (it needs one new permission)."
+            )
+        return None
+    except Exception:  # noqa: BLE001 - the cover is a nice-to-have
+        log.warning("Cover build failed", exc_info=True)
+        return None
 
 
 def _get_owned(db: DbSession, user: CurrentUser, playlist_id: str) -> Playlist:
@@ -130,12 +169,14 @@ async def generate(body: GenerateRequest, user: CurrentUser, db: DbSession, pipe
 async def _generate_and_store(
     body: GenerateRequest, user: CurrentUser, db: DbSession, pipeline: PlaylistPipeline
 ) -> PlaylistOut:
+    seed = await load_seed(body.seed_url, pipeline.spotify) if body.seed_url else None
     result = await pipeline.generate(
         body.prompt.strip(),
         target=body.length,
         energy=body.energy,
         allow_explicit=body.allow_explicit,
         use_my_taste=body.use_my_taste,
+        seed=seed,
     )
     if not result.tracks:
         raise HTTPException(422, "No songs matched that request. Try describing it differently.")
@@ -358,14 +399,41 @@ async def replace_one(
 async def save_to_spotify(playlist_id: str, user: CurrentUser, db: DbSession, spotify: SpotifyDep) -> PlaylistOut:
     playlist = _get_owned(db, user, playlist_id)
     tracks = _tracks(playlist)
-    description = f"{playlist.description} Made with Moodwave from: “{playlist.prompt}”"
-    saved = await spotify.create_playlist(playlist.title, description, [t.uri for t in tracks])
+    saved = await spotify.create_playlist(playlist.title, _spotify_description(playlist), [t.uri for t in tracks])
+    notice = await _apply_cover(spotify, saved.id, tracks)
+    now = datetime.now(UTC)
     playlist.spotify_playlist_id, playlist.spotify_url = saved.id, saved.url
-    playlist.updated_at = datetime.now(UTC)
+    playlist.updated_at = playlist.synced_at = now
     db.add(playlist)
     db.commit()
     db.refresh(playlist)
-    return _to_out(playlist)
+    return _to_out(playlist, notice)
+
+
+@router.post("/{playlist_id}/sync", response_model=PlaylistOut)
+async def sync_to_spotify(playlist_id: str, user: CurrentUser, db: DbSession, spotify: SpotifyDep) -> PlaylistOut:
+    """Make the saved Spotify copy match: name, description, songs in order, and the cover."""
+    playlist = _get_owned(db, user, playlist_id)
+    if not playlist.spotify_playlist_id:
+        raise HTTPException(409, "Save this playlist to Spotify first.")
+    tracks = _tracks(playlist)
+    try:
+        await spotify.replace_playlist(
+            playlist.spotify_playlist_id, playlist.title, _spotify_description(playlist), [t.uri for t in tracks]
+        )
+    except SpotifyError as exc:
+        if exc.status == 404:
+            raise HTTPException(
+                404, "That playlist is gone from your Spotify. Save it again to make a new copy."
+            ) from exc
+        raise
+    notice = await _apply_cover(spotify, playlist.spotify_playlist_id, tracks)
+    now = datetime.now(UTC)
+    playlist.updated_at = playlist.synced_at = now
+    db.add(playlist)
+    db.commit()
+    db.refresh(playlist)
+    return _to_out(playlist, notice)
 
 
 @router.delete("/{playlist_id}", status_code=status.HTTP_204_NO_CONTENT)
