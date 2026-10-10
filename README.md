@@ -2,7 +2,7 @@
 
 > **Describe a moment. Hear it.** Type a mood, a place or a feeling in plain words, and Moodwave's AI plans a playlist, finds **real songs on Spotify** (every pick is verified, none are made up), explains why each one fits, and lets you reshape it, share it and save it to Spotify.
 
-**▶ Live: [welcome-pattern-009301.framer.app](https://welcome-pattern-009301.framer.app)**. No account needed: choose **Try it as a guest**.
+**▶ Live: [moodwave.framer.ai](https://moodwave.framer.ai)**. No account needed: choose **Try it as a guest**.
 
 ![Moodwave home page](docs/screenshots/landing.jpg)
 
@@ -137,7 +137,7 @@ New Spotify apps can't use `/recommendations`, `/audio-features` or related arti
 ## Guests, sign-in and privacy
 
 - **Spotify development mode** only lets allow-listed accounts sign in (up to 25). Everyone else sees an invite-only notice and can **try it as a guest**: real catalogue and AI, 5 playlists a day of up to 30 songs, and a shared daily AI budget. Guests can't save to Spotify, and guest data expires after 30 days. If an allow-listed guest signs in, their guest playlists move to their account.
-- **Your data:** see the live [Privacy](https://welcome-pattern-009301.framer.app/privacy) and [Terms](https://welcome-pattern-009301.framer.app/terms) pages. Accounts can be deleted in one click (`DELETE /auth/me`).
+- **Your data:** see the live [Privacy](https://moodwave.framer.ai/privacy) and [Terms](https://moodwave.framer.ai/terms) pages. Accounts can be deleted in one click (`DELETE /auth/me`).
 
 ## Running it locally
 

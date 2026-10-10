@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     # Share links: this API's public address (blank = from the request) and the site page
     # that shows a shared playlist (`?s=<slug>` is appended).
     public_api_url: str = ""
-    share_page_url: str = "https://welcome-pattern-009301.framer.app/p"
+    share_page_url: str = "https://moodwave.framer.ai/p"
     database_url: str = f"sqlite:///{(API_ROOT / 'moodwave.db').as_posix()}"
     # Anonymous demo sessions. Turn off on a public deploy so strangers can't spend AI credits.
     allow_demo: bool = True
