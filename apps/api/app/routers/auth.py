@@ -6,7 +6,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
-from sqlmodel import select
+from sqlmodel import col, select
 
 from app.core.config import Settings
 from app.core.security import (
@@ -20,8 +20,17 @@ from app.core.security import (
     sign_session,
     verify_oauth_state,
 )
-from app.deps import DbSession, SettingsDep, get_optional_user
-from app.models import User
+from app.deps import CurrentUser, DbSession, SettingsDep, get_optional_user
+from app.models import (
+    ClientError,
+    Playlist,
+    PlaylistCover,
+    PlaylistTrack,
+    RefinementTurn,
+    SpotifyToken,
+    TrackFeedback,
+    User,
+)
 from app.schemas import AppConfigOut, ExchangeRequest, SessionOut, UserOut
 from app.services.guest import check_guest_start, merge_guest_into
 from app.services.spotify.base import SpotifyError
@@ -89,6 +98,33 @@ def _guest_allowed(settings: Settings) -> bool:
 def me(request: Request, db: DbSession, settings: SettingsDep) -> UserOut | None:
     user = get_optional_user(request, db, settings)
     return _user_out(user) if user else None
+
+
+@router.delete("/me", status_code=204)
+def delete_me(user: CurrentUser, db: DbSession, response: Response, settings: SettingsDep) -> Response:
+    """Delete this account and everything stored for it: playlists (songs, changes, covers,
+    share links), thumbs, Spotify tokens, and the account itself. Error-log rows keep the
+    message but lose the link to the account."""
+    playlist_ids = [p.id for p in db.exec(select(Playlist).where(Playlist.user_id == user.id)).all()]
+    if playlist_ids:
+        for model in (PlaylistTrack, RefinementTurn, PlaylistCover):
+            for row in db.exec(select(model).where(col(model.playlist_id).in_(playlist_ids))).all():
+                db.delete(row)
+        db.flush()
+        for playlist in db.exec(select(Playlist).where(col(Playlist.id).in_(playlist_ids))).all():
+            db.delete(playlist)
+    for model in (TrackFeedback, SpotifyToken):
+        for row in db.exec(select(model).where(model.user_id == user.id)).all():
+            db.delete(row)
+    for row in db.exec(select(ClientError).where(ClientError.user_id == user.id)).all():
+        row.user_id = None
+        db.add(row)
+    db.flush()
+    db.delete(db.get(User, user.id))
+    db.commit()
+    response.delete_cookie(settings.session_cookie_name, path="/")
+    response.status_code = 204
+    return response
 
 
 @router.get("/login")

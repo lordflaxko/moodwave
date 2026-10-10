@@ -116,3 +116,46 @@ def test_guest_ai_budget_counts_ai_generations_and_refinements():
             assert guest_ai_available(db) is True
         finally:
             settings.guest_ai_per_day = original
+
+
+def test_delete_me_removes_everything(client):
+    import base64
+    import io
+
+    from PIL import Image
+
+    from app.models import Playlist, PlaylistCover, PlaylistTrack, TrackFeedback
+
+    member = _user(display_name="Leaving Soon", spotify_id="spotify-leaving")
+    app.dependency_overrides[get_spotify] = lambda: MockSpotifyClient("leaving")
+    client.cookies.clear()
+    client.headers["Authorization"] = f"Bearer {sign_session(member.id)}"
+    try:
+        playlist = client.post("/playlists/generate", json={"prompt": "goodbye songs", "length": 15}).json()
+        buffer = io.BytesIO()
+        Image.new("RGB", (200, 200), (9, 9, 9)).save(buffer, "JPEG")
+        client.put(
+            f"/playlists/{playlist['id']}/cover/image", json={"image": base64.b64encode(buffer.getvalue()).decode()}
+        )
+        client.post(f"/playlists/{playlist['id']}/refine", json={"instruction": "more upbeat"})
+        client.post("/feedback", json={"track_id": playlist["tracks"][0]["id"], "verdict": "up"})
+
+        assert client.delete("/auth/me").status_code == 204
+        assert client.get("/auth/me").json() is None
+    finally:
+        app.dependency_overrides.pop(get_spotify, None)
+        client.headers.pop("Authorization", None)
+
+    with Session(engine) as db:
+        assert db.get(User, member.id) is None
+        assert db.get(Playlist, playlist["id"]) is None
+        assert db.get(PlaylistCover, playlist["id"]) is None
+        from sqlmodel import select
+
+        assert not db.exec(select(PlaylistTrack).where(PlaylistTrack.playlist_id == playlist["id"])).all()
+        assert not db.exec(select(TrackFeedback).where(TrackFeedback.user_id == member.id)).all()
+
+
+def test_delete_me_requires_sign_in(client):
+    client.cookies.clear()
+    assert client.delete("/auth/me").status_code == 401
