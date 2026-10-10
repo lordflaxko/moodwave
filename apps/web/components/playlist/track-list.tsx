@@ -149,6 +149,14 @@ function TrackRow({
                 E
               </span>
             ) : null}
+            {track.similar ? (
+              <span
+                className="shrink-0 rounded-[4px] border border-line-strong px-1.5 font-mono text-[9px] leading-4 tracking-wider text-fg-subtle uppercase"
+                title="Added from a similar artist"
+              >
+                Similar
+              </span>
+            ) : null}
             {isNew ? (
               <motion.span
                 initial={{ opacity: 0, scale: 0.6 }}

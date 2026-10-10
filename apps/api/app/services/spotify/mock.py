@@ -47,6 +47,11 @@ class MockSpotifyClient:
             for row in rows
         ]
 
+    async def artist_tracks(self, artist: str, limit: int = 100) -> list[Track]:
+        rows = [row for row in CATALOG if fuzz.ratio(artist.lower(), row.artist.lower()) >= 90]
+        rows.sort(key=lambda row: row.popularity, reverse=True)
+        return [row_to_track(row) for row in rows[:limit]]
+
     async def attach_artist_images(self, tracks: list[Track]) -> list[Track]:
         return tracks  # catalog tracks already carry portraits
 

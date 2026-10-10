@@ -323,6 +323,7 @@ export default function PlaylistView(props: PlaylistViewProps) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={eyebrow}>
                         AI playlist · {relativeTime(playlist.created_at)} · {playlist.ai_source === "claude" ? "Moodwave AI" : "Quick mix"}
+                        {playlist.intent.focus_artists?.length ? ` · Only ${playlist.intent.focus_artists.join(" & ")}` : ""}
                     </div>
                     <h1 style={{ fontFamily: SERIF, fontWeight: 300, fontSize: narrow ? 44 : 64, lineHeight: 1, letterSpacing: "-0.03em", margin: "14px 0 14px" }}>{playlist.title}</h1>
                     <p style={{ fontSize: 16, lineHeight: 1.55, color: C.muted, margin: 0, maxWidth: 560 }}>{playlist.description}</p>
@@ -461,6 +462,7 @@ export default function PlaylistView(props: PlaylistViewProps) {
                                 <span style={{ minWidth: 0 }}>
                                     <span style={{ display: "flex", gap: 8, alignItems: "baseline", minWidth: 0 }}>
                                         <span style={{ fontSize: 15, fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.title}</span>
+                                        {t.similar ? <span title="Added from a similar artist" style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: C.muted, border: `1px solid ${C.line2}`, borderRadius: 4, padding: "0 5px" }}>Similar</span> : null}
                                         {isNew ? <span style={{ fontFamily: MONO, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: C.ink, background: accent, borderRadius: 4, padding: "1px 5px" }}>New</span> : null}
                                         {t.explicit ? <span style={{ fontFamily: MONO, fontSize: 9, color: C.subtle, border: `1px solid ${C.line2}`, borderRadius: 3, padding: "0 3px" }}>E</span> : null}
                                         <span style={{ fontSize: 13, color: C.subtle, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{t.artists.join(", ")}</span>

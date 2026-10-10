@@ -4,6 +4,10 @@ The AI layer proposes songs by name; Spotify search turns them into real catalog
 tracks. A fuzzy matcher rejects search hits that aren't actually the requested song,
 which guards against hallucinated titles. Thin results are backfilled first by asking
 the AI for more songs, then by intent-driven discovery search.
+
+Artist-only requests ("Don Toliver night songs") set `intent.focus_artists`. Then only songs
+crediting those artists (features count) are kept, filled first from the artist's real
+Spotify catalog, and only then from similar artists, which are tagged `similar`.
 """
 
 import asyncio
@@ -29,6 +33,8 @@ _MIN_DURATION_MS = 60_000
 _MAX_DURATION_MS = 12 * 60_000
 _SUFFIX = re.compile(r"\s*[\(\[\-–].*?(remaster|version|edit|mix|live|mono|stereo|feat|ft\.|with ).*$", re.I)
 _PUNCT = re.compile(r"[^\w\s]")
+# Alternate versions skipped when filling from an artist's catalog (unless asked for).
+_ALT_VERSION = re.compile(r"\b(remix|sped up|slowed|reverb|live|instrumental|acapella|a cappella|karaoke|8d)\b", re.I)
 
 
 @dataclass
@@ -62,6 +68,12 @@ def is_match(candidate: Candidate, track: Track) -> bool:
     title_score = fuzz.token_set_ratio(normalize(candidate.title), normalize(track.title))
     artist_score = max(fuzz.token_set_ratio(normalize(candidate.artist), normalize(a)) for a in track.artists)
     return title_score >= 85 and artist_score >= 80
+
+
+def credits(track: Track, artists: list[str]) -> bool:
+    """True if any of `artists` is credited on the track (lead or featured)."""
+    names = [normalize(a) for a in track.artists]
+    return any(fuzz.ratio(normalize(artist), name) >= 90 for artist in artists for name in names)
 
 
 def candidate_line(track: Track) -> str:
@@ -98,9 +110,19 @@ def artist_cap(limit: int, single_artist_request: bool) -> int:
 
 
 def filter_tracks(
-    tracks: list[Track], intent: MusicalIntent, limit: int, seed: list[Track] | None = None
+    tracks: list[Track],
+    intent: MusicalIntent,
+    limit: int,
+    seed: list[Track] | None = None,
+    *,
+    allow_similar: bool = False,
 ) -> list[Track]:
-    """Apply hard constraints, de-duplicate, cap per-artist repeats, and truncate."""
+    """Apply hard constraints, de-duplicate, cap per-artist repeats, and truncate.
+
+    With `intent.focus_artists`, only tracks crediting them pass (uncapped), unless
+    `allow_similar` lets other artists through for the tagged similar-artist fill.
+    """
+    focus = intent.focus_artists
     kept: list[Track] = list(seed or [])
     seen_ids = {t.id for t in kept}
     seen_keys = {(normalize(t.title), normalize(t.artists[0])) for t in kept if t.artists}
@@ -120,8 +142,11 @@ def filter_tracks(
             continue
         if not (_MIN_DURATION_MS <= track.duration_ms <= _MAX_DURATION_MS):
             continue
+        focused = bool(focus) and credits(track, focus)
+        if focus and not focused and not allow_similar:
+            continue
         artist = track.artists[0] if track.artists else ""
-        if per_artist.get(artist, 0) >= cap:
+        if not focused and per_artist.get(artist, 0) >= cap:
             continue
         per_artist[artist] = per_artist.get(artist, 0) + 1
         seen_ids.add(track.id)
@@ -176,6 +201,79 @@ class PlaylistPipeline:
             tracks = filter_tracks(extra, intent, target, seed=tracks)
         return tracks
 
+    async def _artist_catalog(self, intent: MusicalIntent, exclude: list[Track]) -> list[Track]:
+        """Real tracks crediting the focus artists, minus alternate versions and anything used."""
+        wanted_alts = " ".join([intent.title, intent.description, *intent.characteristics]).lower()
+        used = {t.id for t in exclude} | {normalize(t.title) for t in exclude}
+        batches = await asyncio.gather(
+            *(self.spotify.artist_tracks(a) for a in intent.focus_artists[:3]), return_exceptions=True
+        )
+        catalog: list[Track] = []
+        for batch in batches:
+            if isinstance(batch, BaseException):
+                log.info("Artist catalog lookup failed: %s", batch)
+                continue
+            for track in batch:
+                key = normalize(track.title)
+                alt = _ALT_VERSION.search(track.title)
+                if track.id in used or key in used or not credits(track, intent.focus_artists):
+                    continue
+                if alt and alt.group(1).lower() not in wanted_alts:
+                    continue
+                if track.explicit and not intent.explicit_allowed:
+                    continue
+                used.update({track.id, key})
+                catalog.append(track)
+        return catalog
+
+    async def _focus_fill(
+        self, tracks: list[Track], intent: MusicalIntent, target: int, ai: AIProvider
+    ) -> tuple[list[Track], str | None]:
+        """Artist-only requests: fill from the artist's catalog, then from tagged similar artists."""
+        if len(tracks) < target:
+            catalog = await self._artist_catalog(intent, tracks)
+            if catalog:
+                need = target - len(tracks)
+                try:
+                    picks = await ai.pick_from_catalog(intent, catalog, need)
+                except AIError as exc:
+                    log.info("Catalog pick via AI skipped: %s", exc)
+                    picks = await HeuristicProvider().pick_from_catalog(intent, catalog, need)
+                chosen = [catalog[p.index].model_copy(update={"energy": p.energy, "reason": p.reason}) for p in picks]
+                tracks = filter_tracks(chosen, intent, target, seed=tracks)
+
+        artist_count = len(tracks)
+        if len(tracks) < target:
+            names = " & ".join(intent.focus_artists)
+            similar: list[Track] = []
+            try:
+                more = await ai.similar_candidates(
+                    intent, [candidate_line(t) for t in tracks], (target - len(tracks)) * 2
+                )
+                similar = await resolve(more, self.spotify)
+            except AIError as exc:
+                log.info("Similar-artist fill via AI skipped: %s", exc)
+            if len(similar) < target - len(tracks):
+                open_intent = intent.model_copy(update={"focus_artists": []})
+                found = await self.spotify.discover(open_intent, {t.id for t in tracks}, (target - len(tracks)) * 2)
+                similar += [
+                    t if t.energy is not None else t.model_copy(update={"energy": intent.energy}) for t in found
+                ]
+            tagged = [
+                t.model_copy(update={"similar": True, "reason": f"Similar to {names}: {t.reason or 'close in sound'}"})
+                for t in similar
+                if not credits(t, intent.focus_artists)
+            ]
+            tracks = filter_tracks(tagged, intent, target, seed=tracks, allow_similar=True)
+
+        added = len(tracks) - artist_count
+        if not added:
+            return tracks, None
+        names = " & ".join(intent.focus_artists)
+        return tracks, (
+            f"{names} had {artist_count} songs that fit — the last {added} are from similar artists (tagged)."
+        )
+
     async def generate(
         self, prompt: str, *, target: int, energy: float | None, allow_explicit: bool, use_my_taste: bool
     ) -> GenerationResult:
@@ -190,7 +288,12 @@ class PlaylistPipeline:
         ai_for_backfill = self.ai if source == self.ai.source else HeuristicProvider()
 
         tracks = filter_tracks(await resolve(plan.candidates, self.spotify), plan.intent, target)
-        tracks = await self._backfill(tracks, plan.intent, target, ai_for_backfill)
+        if plan.intent.focus_artists:
+            tracks, focus_notice = await self._focus_fill(tracks, plan.intent, target, ai_for_backfill)
+            if focus_notice:
+                notice = (notice + " " if notice else "") + focus_notice
+        else:
+            tracks = await self._backfill(tracks, plan.intent, target, ai_for_backfill)
 
         tracks = await self.spotify.attach_artist_images(tracks)
         if len(tracks) < self.settings.min_tracks:
@@ -227,9 +330,11 @@ class PlaylistPipeline:
         if len(merged) > target:
             merged = merged[:target]
         elif len(merged) < target:
-            merged = await self._backfill(
-                merged, plan.intent, target, self.ai if source == self.ai.source else HeuristicProvider()
-            )
+            backfill_ai = self.ai if source == self.ai.source else HeuristicProvider()
+            if plan.intent.focus_artists:
+                merged, _ = await self._focus_fill(merged, plan.intent, target, backfill_ai)
+            else:
+                merged = await self._backfill(merged, plan.intent, target, backfill_ai)
 
         merged = await self.spotify.attach_artist_images(merged)
         old_ids, new_ids = {t.id for t in tracks}, {t.id for t in merged}
@@ -257,9 +362,16 @@ class PlaylistPipeline:
         others = [t for t in tracks if t.id != track_id]
         resolved = await resolve(alternatives, self.spotify)
         pick = filter_tracks(resolved, intent, len(others) + 1, seed=others)[len(others) :]
+        if not pick and intent.focus_artists:
+            catalog = await self._artist_catalog(intent, tracks)
+            energy = target.energy if target.energy is not None else intent.energy
+            catalog.sort(key=lambda t: abs((t.energy if t.energy is not None else energy) - energy))
+            pick = filter_tracks(catalog, intent, len(others) + 1, seed=others)[len(others) :]
         if not pick:
             discovered = await self.spotify.discover(intent, {t.id for t in tracks}, 6)
-            pick = filter_tracks(discovered, intent, len(others) + 1, seed=others)[len(others) :]
+            pick = filter_tracks(
+                discovered, intent, len(others) + 1, seed=others, allow_similar=bool(intent.focus_artists)
+            )[len(others) :]
         if not pick:
             raise LookupError("Couldn't find a good replacement for that song.")
         replacement = (await self.spotify.attach_artist_images(pick[:1]))[0]

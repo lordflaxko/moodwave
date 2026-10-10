@@ -106,6 +106,29 @@ class SpotifyHttpClient:
     async def search(self, query: str, limit: int = 10) -> list[Track]:
         return await self._search_tracks(query, limit=limit)
 
+    async def artist_tracks(self, artist: str, limit: int = 100) -> list[Track]:
+        # The artist filter matches any credited artist, so features come back too. Search pages
+        # are small in development mode, so fetch a few at a time to stay clear of rate limits.
+        gate = asyncio.Semaphore(4)
+
+        async def page(offset: int) -> list[Track]:
+            async with gate:
+                return await self._search_tracks(f'artist:"{_escape(artist)}"', offset=offset)
+
+        batches = await asyncio.gather(
+            *(page(o) for o in range(0, min(limit, 100), _SEARCH_LIMIT)), return_exceptions=True
+        )
+        found: list[Track] = []
+        seen: set[str] = set()
+        for batch in batches:
+            if isinstance(batch, BaseException):
+                continue
+            for track in batch:
+                if track.id not in seen:
+                    seen.add(track.id)
+                    found.append(track)
+        return found
+
     async def discover(self, intent: MusicalIntent, exclude_ids: set[str], limit: int) -> list[Track]:
         queries = [f'genre:"{_escape(g)}"' for g in intent.genres[:3]]
         queries += [f'artist:"{_escape(a)}"' for a in intent.reference_artists[:3]]

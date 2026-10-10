@@ -31,6 +31,8 @@ class Track(BaseModel):
     # AI-provided annotations (Spotify no longer exposes audio features to new apps).
     energy: float | None = Field(default=None, ge=0, le=1)
     reason: str | None = None
+    # Backfill from a similar artist when an artist-only request ran out of fitting songs.
+    similar: bool = False
 
 
 class MusicalIntent(BaseModel):
@@ -49,6 +51,10 @@ class MusicalIntent(BaseModel):
     vocals: Vocals = "any"
     explicit_allowed: bool = True
     reference_artists: list[str] = Field(default_factory=list)
+    focus_artists: list[str] = Field(
+        default_factory=list,
+        description="Artists the listener wants to hear exclusively (songs by or featuring them); empty = no limit",
+    )
     rationale: str = Field(description="Why this plan fits the request, written for the listener")
 
 

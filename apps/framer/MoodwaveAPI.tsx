@@ -58,6 +58,8 @@ export interface Track {
     release_year: number | null
     energy: number | null
     reason: string | null
+    /** From a similar artist, added when an artist-only request ran out of fitting songs. */
+    similar?: boolean
 }
 export interface Intent {
     title: string
@@ -67,6 +69,8 @@ export interface Intent {
     energy: number
     era: string | null
     rationale: string
+    /** Artists the listener asked to hear exclusively (songs by or featuring them). */
+    focus_artists?: string[]
 }
 export interface Refinement {
     id: number

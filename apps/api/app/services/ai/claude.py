@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from app.core.config import Settings
 from app.schemas import Candidate, MusicalIntent, PlaylistPlan, RefinementPlan, Track
 from app.services.ai import prompts
-from app.services.ai.base import AIError
+from app.services.ai.base import AIError, CatalogPick
 
 log = logging.getLogger(__name__)
 _FALLBACK_BETA = "server-side-fallback-2026-07-01"
@@ -136,3 +136,26 @@ class ClaudeProvider:
     ) -> list[Candidate]:
         line = f"{track.title} — {', '.join(track.artists)} (energy {track.energy})"
         return await self._candidates(prompts.alternatives_message(intent.model_dump_json(), line, exclude, count))
+
+    async def pick_from_catalog(self, intent: MusicalIntent, catalog: list[Track], count: int) -> list[CatalogPick]:
+        lines = [
+            f"{i} | {t.title} — {', '.join(t.artists)}"
+            + (f" | {t.release_year}" if t.release_year else "")
+            + (f" | popularity {t.popularity}" if t.popularity is not None else "")
+            for i, t in enumerate(catalog)
+        ]
+        message = prompts.catalog_pick_message(intent.model_dump_json(), lines, count)
+        data = await self._structured(message, prompts.PICKS_SCHEMA, "low")
+        try:
+            picks = [
+                CatalogPick(int(p["index"]), _clamp(p.get("energy", 0.5)), str(p["reason"])) for p in data["picks"]
+            ]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise AIError("The AI catalog picks did not match the expected format.") from exc
+        # Only indices that exist, each once.
+        seen: set[int] = set()
+        return [p for p in picks if 0 <= p.index < len(catalog) and not (p.index in seen or seen.add(p.index))]
+
+    async def similar_candidates(self, intent: MusicalIntent, exclude: list[str], count: int) -> list[Candidate]:
+        message = prompts.similar_message(intent.model_dump_json(), intent.focus_artists, exclude, count)
+        return await self._candidates(message)

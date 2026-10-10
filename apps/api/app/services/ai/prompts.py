@@ -16,6 +16,7 @@ playlist plan. A separate system resolves your song picks against Spotify's cata
 canonical song title and the primary credited artist (no "feat." in the artist field).
 - Prefer well-known studio versions over live versions, remixes or covers unless asked.
 - Never repeat a song, and use at most two songs per artist unless the request is about one artist.
+- `focus_artists`: when the listener asks for songs BY specific artists ("Don Toliver night songs", "only Drake", "a SZA playlist for the gym", "all Daft Punk"), list those artists. Then every candidate must be by or feature one of them (features count), with no per-artist limit, and propose as many fitting songs as you genuinely know. Leave it empty when they want a sound or vibe ("songs like Don Toliver", "Frank Ocean vibes", "in the style of SZA"); use `reference_artists` for those.
 - Mix familiar anchors with deeper cuts so the playlist feels curated, not algorithmic.
 - Sequence candidates in a satisfying listening order (opening, build, peak, wind-down as appropriate).
 - Respect explicit-content and vocal preferences strictly.
@@ -43,6 +44,7 @@ _INTENT_SCHEMA = {
         "vocals": {"type": "string", "enum": ["any", "female", "male", "mixed", "instrumental"]},
         "explicit_allowed": {"type": "boolean"},
         "reference_artists": {"type": "array", "items": {"type": "string"}},
+        "focus_artists": {"type": "array", "items": {"type": "string"}},
         "rationale": {"type": "string"},
     },
     "required": [
@@ -59,6 +61,7 @@ _INTENT_SCHEMA = {
         "vocals",
         "explicit_allowed",
         "reference_artists",
+        "focus_artists",
         "rationale",
     ],
     "additionalProperties": False,
@@ -135,7 +138,9 @@ def refine_message(intent_json: str, tracks_block: str, instruction: str) -> str
         "Propose roughly 1.5x as many candidates as songs removed (plus extras if the listener wants a "
         "longer playlist) so the playlist keeps about the same length unless asked otherwise. Keep tracks "
         "that still fit. `target_length` is how many songs the playlist should have afterwards (keep the "
-        "current count unless the listener asks for a shorter or longer playlist). `summary` tells the listener what you changed in one or two sentences."
+        "current count unless the listener asks for a shorter or longer playlist). `summary` tells the listener what you changed in one or two sentences. "
+        "If the intent has `focus_artists`, keep them and only add songs by or featuring them, unless the "
+        "instruction explicitly asks for other artists (then clear `focus_artists`)."
     )
 
 
@@ -154,4 +159,47 @@ def alternatives_message(intent_json: str, track_line: str, exclude: list[str], 
         f"<already_used>\n" + "\n".join(exclude) + "\n</already_used>\n"
         f"Suggest {count} different songs that could take this song's place: similar energy and role in "
         "the sequence, consistent with the intent, not already used."
+    )
+
+
+PICKS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "picks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "index": {"type": "integer"},
+                    "energy": {"type": "number"},
+                    "reason": {"type": "string"},
+                },
+                "required": ["index", "energy", "reason"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["picks"],
+    "additionalProperties": False,
+}
+
+
+def catalog_pick_message(intent_json: str, catalog_lines: list[str], count: int) -> str:
+    return (
+        f"<intent>{intent_json}</intent>\n"
+        "<catalog>\n" + "\n".join(catalog_lines) + "\n</catalog>\n"
+        f"These are real songs by (or featuring) the listener's chosen artists. Pick up to {count} that "
+        "fit the intent, in listening order. Use only the index numbers shown; skip songs that don't fit "
+        "rather than forcing them. Give each an energy estimate and a short reason."
+    )
+
+
+def similar_message(intent_json: str, focus: list[str], exclude: list[str], count: int) -> str:
+    names = ", ".join(focus)
+    return (
+        f"<intent>{intent_json}</intent>\n"
+        f"<already_used>\n" + "\n".join(exclude) + "\n</already_used>\n"
+        f"The listener wants songs by {names}, but there aren't enough that fit. Suggest {count} songs "
+        f"by OTHER artists who sound close to {names} and fit the intent. Never suggest songs by or "
+        f"featuring {names}, and don't repeat anything already used."
     )

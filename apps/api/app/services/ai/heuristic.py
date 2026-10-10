@@ -12,6 +12,7 @@ from typing import Literal
 
 from app.data.catalog import CATALOG
 from app.schemas import Candidate, MusicalIntent, PlaylistPlan, RefinementPlan, Track
+from app.services.ai.base import CatalogPick
 from app.services.spotify.catalog_scoring import (
     CATALOG_BY_ID,
     DEEP_CUTS_TRAIT,
@@ -367,6 +368,32 @@ def _candidates_for(
     return picked
 
 
+_FOCUS_WORDS = r"(?:songs|tracks|music|playlist|hits|deep cuts|records|bangers|classics)"
+
+
+def detect_focus(text: str) -> list[str]:
+    """Artists the prompt asks to hear exclusively ("Don Toliver night songs", "only Drake")."""
+    found: list[str] = []
+    for artist in _ARTISTS:
+        a = re.escape(artist.lower())
+        if not re.search(rf"(?<!\w){a}(?!\w)", text) or any(artist.lower() in f.lower() for f in found):
+            continue
+        if re.search(
+            rf"\b(like|similar to|style of|sounds? like|inspired by|vibes? of|reminds? me of)\s+(?:\w+\s+){{0,2}}{a}(?!\w)",
+            text,
+        ):
+            continue
+        if re.search(rf"(?<!\w){a}(?:'s)?\s+(vibes?|style|energy|type|esque|adjacent)\b", text):
+            continue
+        if (
+            re.search(rf"\b(only|all|just|songs by|tracks by|music by|by)\s+{a}(?!\w)", text)
+            or re.search(rf"(?<!\w){a}(?:'s)?\s+(?:[\w&'-]+\s+){{0,3}}?{_FOCUS_WORDS}\b", text)
+            or re.search(rf"(?<!\w){a}\s+only\b", text)
+        ):
+            found.append(artist)
+    return found[:3]
+
+
 def interpret(prompt: str, *, energy_override: float | None = None, allow_explicit: bool = True) -> MusicalIntent:
     text = prompt.lower()
     matched = [rule for rule in _RULES if any(_contains(text, k) for k in rule.keywords)]
@@ -403,6 +430,7 @@ def interpret(prompt: str, *, energy_override: float | None = None, allow_explic
     vocals = _detect_vocals(text)
     era = _detect_era(text)
     references = [artist for artist in _ARTISTS if artist.lower() in text][:5]
+    focus = detect_focus(text)
 
     title = matched[0].title if matched else f"{genres[0].title()} Daydream"
     scene = matched[0].scene if matched else "whatever you're doing"
@@ -420,6 +448,8 @@ def interpret(prompt: str, *, energy_override: float | None = None, allow_explic
         extras.append(f"Picks favor the {era} era.")
     if not explicit_allowed:
         extras.append("Everything is clean.")
+    if focus:
+        extras.append(f"Every song is by or features {' & '.join(focus)}.")
     rationale = (
         f"Built for {scene}: a {_describe_energy(energy)}, {mood_text} mix{trait_text}. "
         f"It leans on {genre_text} and is sequenced to ease in, build gently, then land softly. " + " ".join(extras)
@@ -441,6 +471,7 @@ def interpret(prompt: str, *, energy_override: float | None = None, allow_explic
         vocals=vocals,
         explicit_allowed=explicit_allowed,
         reference_artists=references,
+        focus_artists=focus,
         rationale=rationale,
     )
 
@@ -463,7 +494,13 @@ class HeuristicProvider:
         taste_artists: list[str],
     ) -> PlaylistPlan:
         intent = interpret(prompt, energy_override=energy_override, allow_explicit=allow_explicit)
-        candidates = _sequence(_candidates_for(intent, target + 6))
+        if intent.focus_artists:
+            rows = rank_catalog(intent, artists=set(intent.focus_artists))[: target + 6]
+            candidates = _sequence(
+                [Candidate(title=r.title, artist=r.artist, energy=r.energy, reason=_reason(r, intent)) for r in rows]
+            )
+        else:
+            candidates = _sequence(_candidates_for(intent, target + 6))
         return PlaylistPlan(intent=intent, candidates=candidates)
 
     async def refine(self, intent: MusicalIntent, tracks: list[Track], instruction: str) -> RefinementPlan:
@@ -579,3 +616,27 @@ class HeuristicProvider:
         local = intent.model_copy(update={"energy": track.energy if track.energy is not None else intent.energy})
         excluded_ids = {catalog_id(r) for r in CATALOG if f"{r.title} — {r.artist}" in set(exclude)}
         return _candidates_for(local, count, excluded_ids | {track.id})
+
+    async def pick_from_catalog(self, intent: MusicalIntent, catalog: list[Track], count: int) -> list[CatalogPick]:
+        # Closest energy first, popularity as the tie-breaker.
+        def score(t: Track) -> float:
+            energy = t.energy if t.energy is not None else intent.energy
+            return abs(energy - intent.energy) - (t.popularity or 0) / 400
+
+        ranked = sorted(range(len(catalog)), key=lambda i: score(catalog[i]))[:count]
+        mood = intent.moods[0] if intent.moods else "the"
+        return [
+            CatalogPick(
+                i,
+                catalog[i].energy if catalog[i].energy is not None else intent.energy,
+                f"From {catalog[i].artists[0]}'s catalog, fits the {mood} mood",
+            )
+            for i in ranked
+        ]
+
+    async def similar_candidates(self, intent: MusicalIntent, exclude: list[str], count: int) -> list[Candidate]:
+        focus = {a.lower() for a in intent.focus_artists}
+        excluded_ids = {catalog_id(r) for r in CATALOG if f"{r.title} — {r.artist}" in set(exclude)}
+        excluded_ids |= {catalog_id(r) for r in CATALOG if r.artist.lower() in focus}
+        open_intent = intent.model_copy(update={"focus_artists": []})
+        return _candidates_for(open_intent, count, excluded_ids)

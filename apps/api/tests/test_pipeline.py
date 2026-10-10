@@ -2,8 +2,8 @@
 
 from app.schemas import Candidate, MusicalIntent, PlaylistPlan, Track
 from app.services.ai.base import AIError
-from app.services.ai.heuristic import HeuristicProvider, interpret
-from app.services.pipeline import PlaylistPipeline, artist_cap, filter_tracks, is_match, normalize
+from app.services.ai.heuristic import HeuristicProvider, detect_focus, interpret
+from app.services.pipeline import PlaylistPipeline, artist_cap, credits, filter_tracks, is_match, normalize
 from app.services.spotify.mock import MockSpotifyClient
 
 
@@ -137,3 +137,134 @@ async def test_hallucinated_songs_are_dropped_and_backfilled():
     result = await pipeline.generate("indie", target=15, energy=None, allow_explicit=True, use_my_taste=False)
     assert all("Imaginary" not in t.title for t in result.tracks)
     assert len(result.tracks) == 15
+
+
+# --- Artist-only requests ("Don Toliver night songs") ---------------------------------------
+
+DON = "Don Toliver"
+
+
+def _song(i: int, title: str, *artists: str, explicit: bool = False) -> Track:
+    return Track(
+        id=f"s{i}",
+        uri=f"spotify:track:s{i}",
+        title=title,
+        artists=list(artists),
+        album="A",
+        duration_ms=200_000,
+        explicit=explicit,
+        popularity=90 - i,
+    )
+
+
+class _FakeSpotify(MockSpotifyClient):
+    """Search and artist catalog backed by a fixed list, so features and versions are controlled."""
+
+    def __init__(self, songs: list[Track], catalog: list[Track]):
+        super().__init__()
+        self.songs = songs
+        self.catalog = catalog
+
+    async def search_track(self, title: str, artist: str) -> list[Track]:
+        return [t for t in self.songs if t.title.lower() == title.lower()]
+
+    async def artist_tracks(self, artist: str, limit: int = 100) -> list[Track]:
+        return list(self.catalog)
+
+    async def discover(self, intent, exclude_ids, limit):
+        return []
+
+
+class _FocusAI(HeuristicProvider):
+    source = "claude"  # type: ignore[assignment]
+
+    def __init__(self, candidates: list[tuple[str, str]], similar: list[tuple[str, str]] | None = None):
+        self.candidates = candidates
+        self.similar = similar or []
+
+    async def plan(self, prompt, **kwargs) -> PlaylistPlan:
+        intent = _intent(focus_artists=[DON], reference_artists=[DON])
+        cands = [Candidate(title=t, artist=a, energy=0.4, reason="r") for t, a in self.candidates]
+        return PlaylistPlan(intent=intent, candidates=cands)
+
+    async def similar_candidates(self, intent, exclude, count):
+        return [Candidate(title=t, artist=a, energy=0.4, reason="close") for t, a in self.similar][:count]
+
+
+async def test_focus_keeps_only_credited_songs_features_included_and_uncapped():
+    songs = [
+        _song(1, "After Party", DON),
+        _song(2, "No Idea", DON),
+        _song(3, "Can't Say", "Travis Scott", DON),  # a feature counts
+        _song(4, "Blinding Lights", "The Weeknd"),  # not him: dropped
+        _song(5, "Lose My Mind", DON),
+        _song(6, "Bandit", DON),
+    ]
+    catalog = [_song(10 + i, f"Deep Cut {i}", DON) for i in range(10)]
+    ai = _FocusAI([(t.title, t.artists[0]) for t in songs])
+    result = await PlaylistPipeline(ai, _FakeSpotify(songs, catalog)).generate(
+        "Don Toliver night songs", target=8, energy=None, allow_explicit=True, use_my_taste=False
+    )
+    assert len(result.tracks) == 8
+    assert all(credits(t, [DON]) for t in result.tracks)
+    assert any(t.title == "Can't Say" for t in result.tracks)
+    assert not any(t.similar for t in result.tracks)
+    # (Short test playlists also get the generic "only N songs" note; no similar-artist note.)
+    assert "similar artists" not in (result.notice or "")
+
+
+async def test_focus_catalog_fill_skips_alternate_versions():
+    catalog = [
+        _song(20, "Lemonade (Remix)", DON),
+        _song(21, "After Party - Sped Up", DON),
+        _song(22, "Private Landing", DON),
+        _song(23, "Embarrassed", DON),
+    ]
+    ai = _FocusAI([])
+    result = await PlaylistPipeline(ai, _FakeSpotify([], catalog)).generate(
+        "Don Toliver songs", target=2, energy=None, allow_explicit=True, use_my_taste=False
+    )
+    titles = {t.title for t in result.tracks}
+    assert titles == {"Private Landing", "Embarrassed"}
+
+
+async def test_focus_fills_with_tagged_similar_artists_only_after_catalog_runs_out():
+    songs = [_song(1, "After Party", DON), _song(2, "No Idea", DON)]
+    catalog = [_song(30, "Cardigan", DON)]
+    similar_songs = [_song(40 + i, f"Close Song {i}", f"Similar Artist {i}") for i in range(4)]
+    ai = _FocusAI([("After Party", DON), ("No Idea", DON)], similar=[(t.title, t.artists[0]) for t in similar_songs])
+    result = await PlaylistPipeline(ai, _FakeSpotify(songs + similar_songs, catalog)).generate(
+        "Don Toliver night songs", target=6, energy=None, allow_explicit=True, use_my_taste=False
+    )
+    assert len(result.tracks) == 6
+    head, tail = result.tracks[:3], result.tracks[3:]
+    assert all(credits(t, [DON]) and not t.similar for t in head)
+    assert all(t.similar and not credits(t, [DON]) for t in tail)
+    assert all(t.reason.startswith("Similar to Don Toliver") for t in tail)
+    assert result.notice.startswith("Don Toliver had 3 songs that fit — the last 3 are from similar artists (tagged).")
+
+
+def test_detect_focus_tells_by_from_like():
+    assert detect_focus("frank ocean night songs") == ["Frank Ocean"]
+    assert detect_focus("only drake for the gym") == ["Drake"]
+    assert detect_focus("a sza playlist for sunday") == ["SZA"]
+    assert detect_focus("songs like frank ocean") == []
+    assert detect_focus("frank ocean vibes for a drive") == []
+    assert interpret("Frank Ocean night songs").focus_artists == ["Frank Ocean"]
+    assert interpret("music that sounds like Frank Ocean").focus_artists == []
+
+
+async def test_demo_artist_only_playlist_then_refine_keeps_focus():
+    pipeline = PlaylistPipeline(HeuristicProvider(), MockSpotifyClient())
+    result = await pipeline.generate(
+        "Frank Ocean night songs", target=15, energy=None, allow_explicit=True, use_my_taste=False
+    )
+    frank = [t for t in result.tracks if not t.similar]
+    assert frank and all(credits(t, ["Frank Ocean"]) for t in frank)
+    assert result.tracks[: len(frank)] == frank  # the artist's songs come first
+    assert all(t.similar for t in result.tracks[len(frank) :])
+    assert result.notice and "Frank Ocean had" in result.notice
+
+    refined = await pipeline.refine(result.intent, result.tracks, "make it more upbeat")
+    assert refined.intent.focus_artists == ["Frank Ocean"]
+    assert all(credits(t, ["Frank Ocean"]) or t.similar for t in refined.tracks)

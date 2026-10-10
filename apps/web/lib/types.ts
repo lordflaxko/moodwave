@@ -19,6 +19,8 @@ export interface Track {
   release_year: number | null;
   energy: number | null;
   reason: string | null;
+  /** From a similar artist, added when an artist-only request ran out of fitting songs. */
+  similar?: boolean;
 }
 
 export interface MusicalIntent {
@@ -35,6 +37,8 @@ export interface MusicalIntent {
   vocals: Vocals;
   explicit_allowed: boolean;
   reference_artists: string[];
+  /** Artists the listener asked to hear exclusively (songs by or featuring them). */
+  focus_artists?: string[];
   rationale: string;
 }
 
