@@ -12,7 +12,7 @@ from the database so they survive restarts:
 import asyncio
 import time
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
 from sqlalchemy import func
@@ -31,6 +31,7 @@ GUEST_BUSY_NOTICE = (
 _app_token: tuple[str, float] | None = None
 _app_token_lock = asyncio.Lock()
 _guest_starts: dict[str, list[float]] = defaultdict(list)
+_last_purge = 0.0
 
 
 async def app_access_token() -> str:
@@ -121,3 +122,24 @@ def merge_guest_into(db: Session, guest: User, user: User) -> int:
         db.add(feedback)
     db.commit()
     return moved
+
+
+def purge_expired_guests(db: Session, *, force: bool = False) -> int:
+    """Delete guest accounts (and all their data) older than `guest_retention_days`.
+
+    Runs at most once a day per process unless forced. Returns how many were removed.
+    """
+    global _last_purge
+    now = time.time()
+    if not force and now - _last_purge < 86_400:
+        return 0
+    _last_purge = now
+    from app.services.accounts import delete_user_data
+
+    cutoff = datetime.now(UTC) - timedelta(days=get_settings().guest_retention_days)
+    expired = db.exec(select(User).where(User.is_guest, User.created_at < cutoff)).all()
+    for user in expired:
+        delete_user_data(db, user, commit=False)
+    if expired:
+        db.commit()
+    return len(expired)

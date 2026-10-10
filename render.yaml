@@ -27,7 +27,7 @@ services:
         sync: false
       # Where the Next.js app runs, if you still use it (only used for its sign-in redirect).
       - key: FRONTEND_URL
-        value: http://127.0.0.1:3000
+        value: https://welcome-pattern-009301.framer.app
       - key: SPOTIFY_CLIENT_ID
         sync: false
       - key: SPOTIFY_CLIENT_SECRET

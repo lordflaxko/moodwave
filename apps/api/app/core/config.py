@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     guest_playlists_per_day: int = 5
     guest_ai_per_day: int = 40
     guest_max_tracks: int = 30
+    # Guests can't come back once their browser forgets them, so their data expires.
+    guest_retention_days: int = 30
+    # Who can read the private error log (comma-separated Spotify user IDs). Unset: the first
+    # Spotify account created here.
+    owner_spotify_ids: str = ""
 
     # Used to sign the session cookie and derive the token-encryption key.
     session_secret: str = "dev-only-change-me-please-0123456789abcdef"
@@ -60,6 +65,21 @@ class Settings(BaseSettings):
     generate_rate_limit_per_minute: int = 8
     min_tracks: int = 15
     max_tracks: int = 100
+
+    @property
+    def site_url(self) -> str:
+        """Where people land after sign-in when no page asked for them: FRONTEND_URL, or in
+        production, if that's still a local development address, the first EXTRA_ORIGINS site."""
+        front = self.frontend_url.rstrip("/")
+        extra = [o.strip().rstrip("/") for o in self.extra_origins.split(",") if o.strip()]
+        # In production a localhost FRONTEND_URL is a leftover, not a real destination.
+        if self.environment == "production" and self.frontend_is_local and extra:
+            return extra[0]
+        return front
+
+    @property
+    def frontend_is_local(self) -> bool:
+        return any(h in self.frontend_url for h in ("://127.0.0.1", "://localhost", "://0.0.0.0"))
 
     @property
     def allowed_origins(self) -> list[str]:

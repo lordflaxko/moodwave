@@ -178,8 +178,12 @@ def test_error_log_is_private(client, demo_client):
     assert demo_client.get("/telemetry/errors").status_code == 403
 
 
-def test_error_log_groups_for_owner(client):
+def test_error_log_groups_for_owner(client, monkeypatch):
     from sqlmodel import Session
+
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "owner_spotify_ids", "owner-1")
 
     from app.core.security import sign_session
     from app.db import engine
@@ -428,3 +432,49 @@ def test_summary_lists_artists_and_genres(demo_client):
 def test_health_answers_head_for_uptime_monitors(client):
     assert client.get("/health").json() == {"status": "ok"}
     assert client.head("/health").status_code == 200
+
+
+def test_error_log_is_private_to_the_owner(client, monkeypatch):
+    from sqlmodel import Session
+
+    from app.core.config import get_settings
+    from app.core.security import sign_session
+    from app.db import engine
+    from app.models import User
+
+    monkeypatch.setattr(get_settings(), "owner_spotify_ids", "the-owner")
+    with Session(engine) as db:
+        owner = User(display_name="Owner", spotify_id="the-owner")
+        friend = User(display_name="Friend", spotify_id="a-friend")
+        guest = User(display_name="Guest", is_guest=True)
+        db.add_all([owner, friend, guest])
+        db.commit()
+        tokens = {u.display_name: sign_session(u.id) for u in (owner, friend, guest)}
+    client.cookies.clear()
+
+    def status(name):
+        return client.get("/telemetry/errors", headers={"Authorization": f"Bearer {tokens[name]}"}).status_code
+
+    assert status("Owner") == 200
+    assert status("Friend") == 403
+    assert status("Guest") == 403
+
+
+def test_owner_defaults_to_first_spotify_account():
+    from sqlmodel import Session, col, select
+
+    from app.db import engine
+    from app.models import User
+    from app.routers.telemetry import is_owner
+
+    with Session(engine) as db:
+        later = User(display_name="Later", spotify_id="later-account")
+        db.add(later)
+        db.commit()
+        first = db.exec(
+            select(User)
+            .where(col(User.spotify_id).is_not(None), User.is_demo == False, User.is_guest == False)  # noqa: E712
+            .order_by(col(User.created_at).asc())
+        ).first()
+        assert is_owner(db, first) is True
+        assert first.id == later.id or is_owner(db, later) is False

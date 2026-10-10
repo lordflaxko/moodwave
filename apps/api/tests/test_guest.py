@@ -159,3 +159,57 @@ def test_delete_me_removes_everything(client):
 def test_delete_me_requires_sign_in(client):
     client.cookies.clear()
     assert client.delete("/auth/me").status_code == 401
+
+
+def test_purge_removes_only_expired_guests():
+    from datetime import UTC, datetime, timedelta
+
+    from app.models import Playlist
+    from app.services.guest import purge_expired_guests
+
+    old = datetime.now(UTC) - timedelta(days=45)
+    expired = _user(display_name="Guest", is_guest=True, created_at=old)
+    fresh = _user(display_name="Guest", is_guest=True)
+    member = _user(display_name="Member", spotify_id="spotify-old-member", created_at=old)
+    with Session(engine) as db:
+        db.add(Playlist(user_id=expired.id, title="t", prompt="p", intent={}))
+        db.commit()
+        removed = purge_expired_guests(db, force=True)
+        assert removed >= 1
+        assert db.get(User, expired.id) is None
+        assert db.get(User, fresh.id) is not None
+        assert db.get(User, member.id) is not None
+        from sqlmodel import select
+
+        assert not db.exec(select(Playlist).where(Playlist.user_id == expired.id)).all()
+
+
+def test_site_url_skips_localhost_only_in_production():
+    from app.core.config import Settings
+
+    prod = Settings(
+        environment="production",
+        frontend_url="http://127.0.0.1:3000",
+        extra_origins="https://site.example, https://old.example",
+    )
+    assert prod.site_url == "https://site.example"
+    dev = Settings(
+        environment="development", frontend_url="http://127.0.0.1:3000", extra_origins="https://site.example"
+    )
+    assert dev.site_url == "http://127.0.0.1:3000"
+    real = Settings(
+        environment="production", frontend_url="https://moodwave.example/", extra_origins="https://site.example"
+    )
+    assert real.site_url == "https://moodwave.example" and not real.frontend_is_local
+
+
+def test_failed_sign_in_without_return_address_goes_to_site(client, monkeypatch):
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "environment", "production")
+    monkeypatch.setattr(settings, "extra_origins", "https://site.example")
+    client.cookies.clear()
+    res = client.get("/auth/callback?error=access_denied", follow_redirects=False)
+    assert res.status_code == 302
+    assert res.headers["location"].startswith("https://site.example/?auth_error=access_denied")

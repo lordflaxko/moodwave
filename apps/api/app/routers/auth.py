@@ -6,7 +6,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
-from sqlmodel import col, select
+from sqlmodel import select
 
 from app.core.config import Settings
 from app.core.security import (
@@ -21,18 +21,10 @@ from app.core.security import (
     verify_oauth_state,
 )
 from app.deps import CurrentUser, DbSession, SettingsDep, get_optional_user
-from app.models import (
-    ClientError,
-    Playlist,
-    PlaylistCover,
-    PlaylistTrack,
-    RefinementTurn,
-    SpotifyToken,
-    TrackFeedback,
-    User,
-)
+from app.models import User
 from app.schemas import AppConfigOut, ExchangeRequest, SessionOut, UserOut
-from app.services.guest import check_guest_start, merge_guest_into
+from app.services.accounts import delete_user_data
+from app.services.guest import check_guest_start, merge_guest_into, purge_expired_guests
 from app.services.spotify.base import SpotifyError
 from app.services.spotify.oauth import authorize_url, exchange_code, store_tokens
 
@@ -102,26 +94,8 @@ def me(request: Request, db: DbSession, settings: SettingsDep) -> UserOut | None
 
 @router.delete("/me", status_code=204)
 def delete_me(user: CurrentUser, db: DbSession, response: Response, settings: SettingsDep) -> Response:
-    """Delete this account and everything stored for it: playlists (songs, changes, covers,
-    share links), thumbs, Spotify tokens, and the account itself. Error-log rows keep the
-    message but lose the link to the account."""
-    playlist_ids = [p.id for p in db.exec(select(Playlist).where(Playlist.user_id == user.id)).all()]
-    if playlist_ids:
-        for model in (PlaylistTrack, RefinementTurn, PlaylistCover):
-            for row in db.exec(select(model).where(col(model.playlist_id).in_(playlist_ids))).all():
-                db.delete(row)
-        db.flush()
-        for playlist in db.exec(select(Playlist).where(col(Playlist.id).in_(playlist_ids))).all():
-            db.delete(playlist)
-    for model in (TrackFeedback, SpotifyToken):
-        for row in db.exec(select(model).where(model.user_id == user.id)).all():
-            db.delete(row)
-    for row in db.exec(select(ClientError).where(ClientError.user_id == user.id)).all():
-        row.user_id = None
-        db.add(row)
-    db.flush()
-    db.delete(db.get(User, user.id))
-    db.commit()
+    """Delete this account and everything stored for it (see `delete_user_data`)."""
+    delete_user_data(db, user)
     response.delete_cookie(settings.session_cookie_name, path="/")
     response.status_code = 204
     return response
@@ -161,7 +135,7 @@ async def callback(
     return_to = _safe_return_to(oauth_return_to(request.cookies.get(OAUTH_COOKIE_NAME)), settings)
 
     def fail(reason: str) -> RedirectResponse:
-        target = return_to.split("?")[0] if return_to else f"{settings.frontend_url}/"
+        target = return_to.split("?")[0] if return_to else f"{settings.site_url}/"
         response = RedirectResponse(f"{target}?{urlencode({'auth_error': reason})}", status_code=302)
         response.delete_cookie(OAUTH_COOKIE_NAME, path="/")
         return response
@@ -204,6 +178,13 @@ async def callback(
         response.delete_cookie(OAUTH_COOKIE_NAME, path="/")
         return response
 
+    # The Framer site signs in with a hand-off code; the local Next.js app uses the cookie.
+    if not (settings.frontend_is_local and settings.site_url == settings.frontend_url.rstrip("/")):
+        response = RedirectResponse(
+            f"{settings.site_url}/#{urlencode({'mw_code': sign_handoff(user.id)})}", status_code=302
+        )
+        response.delete_cookie(OAUTH_COOKIE_NAME, path="/")
+        return response
     response = RedirectResponse(f"{settings.frontend_url}/generate", status_code=302)
     response.delete_cookie(OAUTH_COOKIE_NAME, path="/")
     _set_session_cookie(response, settings, user.id)
@@ -261,6 +242,7 @@ def start_guest(request: Request, db: DbSession, settings: SettingsDep) -> Sessi
         raise HTTPException(403, "Guest mode is switched off here. Sign in with Spotify instead.")
     forwarded = request.headers.get("x-forwarded-for", "")
     check_guest_start(forwarded.split(",")[0].strip() or (request.client.host if request.client else "?"))
+    purge_expired_guests(db)
     user = User(display_name="Guest", is_guest=True)
     db.add(user)
     db.commit()

@@ -14,6 +14,7 @@ from app.db import engine, init_db
 from app.routers import auth, catalog, feedback, playlists, share, spotify, telemetry
 from app.routers.telemetry import record_error
 from app.services.ai.base import AIError
+from app.services.guest import purge_expired_guests
 from app.services.spotify.base import SpotifyError
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
@@ -23,6 +24,13 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    try:
+        with Session(engine) as db:
+            removed = purge_expired_guests(db, force=True)
+        if removed:
+            logging.getLogger("moodwave").info("Removed %s expired guest accounts", removed)
+    except Exception:  # noqa: BLE001 - housekeeping must never stop the API starting
+        logging.getLogger("moodwave").warning("Guest purge failed", exc_info=True)
     mode = "demo catalog" if settings.demo_mode else "Spotify Web API"
     ai = settings.anthropic_model if settings.ai_enabled else "heuristic curator"
     logging.getLogger("moodwave").info("Moodwave API ready: music=%s, ai=%s", mode, ai)
