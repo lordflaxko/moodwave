@@ -5,7 +5,9 @@ import base64
 import binascii
 import json
 import logging
+import secrets
 import traceback
+from collections import Counter
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import Annotated
@@ -114,6 +116,7 @@ def _to_out(playlist: Playlist, notice: str | None = None) -> PlaylistOut:
         synced_at=playlist.synced_at,
         needs_sync=_needs_sync(playlist),
         cover=_cover_out(playlist, tracks),
+        share_slug=playlist.share_slug,
     )
 
 
@@ -336,6 +339,8 @@ def list_playlists(user: CurrentUser, db: DbSession) -> list[PlaylistSummary]:
                 energy=p.intent.get("energy", 0.5),
                 cover_images=_cover_images(p, tracks),
                 cover_seeds=[t.album for t in tracks[:4]],
+                artists=[a for a, _ in Counter(t.artists[0] for t in tracks if t.artists).most_common(30)],
+                genres=p.intent.get("genres", [])[:4],
                 track_count=len(tracks),
                 total_duration_ms=sum(t.duration_ms for t in tracks),
                 saved_to_spotify=p.spotify_playlist_id is not None,
@@ -485,6 +490,57 @@ async def sync_to_spotify(playlist_id: str, user: CurrentUser, db: DbSession, sp
     db.commit()
     db.refresh(playlist)
     return _to_out(playlist, notice)
+
+
+@router.post("/{playlist_id}/share", response_model=PlaylistOut)
+def share_playlist(playlist_id: str, user: CurrentUser, db: DbSession) -> PlaylistOut:
+    """Turn on a public, read-only link (idempotent: the same link comes back)."""
+    playlist = _get_owned(db, user, playlist_id)
+    if not playlist.share_slug:
+        while True:
+            slug = secrets.token_urlsafe(7).replace("-", "x").replace("_", "y")
+            if db.exec(select(Playlist).where(Playlist.share_slug == slug)).first() is None:
+                break
+        playlist.share_slug = slug
+        db.add(playlist)
+        db.commit()
+        db.refresh(playlist)
+    return _to_out(playlist)
+
+
+@router.delete("/{playlist_id}/share", response_model=PlaylistOut)
+def unshare_playlist(playlist_id: str, user: CurrentUser, db: DbSession) -> PlaylistOut:
+    """Turn the link off; it stops working everywhere (a new share makes a new link)."""
+    playlist = _get_owned(db, user, playlist_id)
+    playlist.share_slug = None
+    db.add(playlist)
+    db.commit()
+    db.refresh(playlist)
+    return _to_out(playlist)
+
+
+@router.post("/{playlist_id}/duplicate", response_model=PlaylistOut, status_code=status.HTTP_201_CREATED)
+def duplicate_playlist(playlist_id: str, user: CurrentUser, db: DbSession) -> PlaylistOut:
+    """A private copy to take somewhere else: same songs, cover and intent; not shared or saved."""
+    source = _get_owned(db, user, playlist_id)
+    copy = Playlist(
+        user_id=user.id,
+        title=f"{source.title} (copy)"[:100],
+        description=source.description,
+        prompt=source.prompt,
+        intent=dict(source.intent),
+        ai_source=source.ai_source,
+        cover=dict(source.cover) if source.cover else None,
+    )
+    _set_tracks(copy, _tracks(source))
+    db.add(copy)
+    db.flush()
+    upload = db.get(PlaylistCover, source.id)
+    if upload is not None:
+        db.add(PlaylistCover(playlist_id=copy.id, jpeg=upload.jpeg))
+    db.commit()
+    db.refresh(copy)
+    return _to_out(copy)
 
 
 @router.put("/{playlist_id}/cover", response_model=PlaylistOut)

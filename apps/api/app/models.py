@@ -47,6 +47,8 @@ class Playlist(SQLModel, table=True):
     spotify_url: str | None = None
     # When the Spotify copy last matched this playlist (save or sync).
     synced_at: datetime | None = None
+    # Public read-only link (/s/{share_slug}); None when sharing is off.
+    share_slug: str | None = Field(default=None, index=True)
     # Cover choice: {"mode": "auto" | "grid" | "single" | "upload", "track_ids": [...], "v": version}.
     cover: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     created_at: datetime = Field(default_factory=_now, index=True)

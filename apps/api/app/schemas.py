@@ -169,6 +169,7 @@ class PlaylistOut(BaseModel):
     # Saved to Spotify, then edited here since: offer "Update on Spotify".
     needs_sync: bool = False
     cover: CoverOut = Field(default_factory=CoverOut)
+    share_slug: str | None = None
 
 
 class PlaylistSummary(BaseModel):
@@ -179,6 +180,9 @@ class PlaylistSummary(BaseModel):
     energy: float
     cover_images: list[str | None]
     cover_seeds: list[str]
+    # Lead artists, most frequent first (for library search).
+    artists: list[str] = Field(default_factory=list)
+    genres: list[str] = Field(default_factory=list)
     track_count: int
     total_duration_ms: int
     saved_to_spotify: bool

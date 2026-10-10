@@ -11,7 +11,7 @@ from sqlmodel import Session
 
 from app.core.config import get_settings
 from app.db import engine, init_db
-from app.routers import auth, catalog, feedback, playlists, spotify, telemetry
+from app.routers import auth, catalog, feedback, playlists, share, spotify, telemetry
 from app.routers.telemetry import record_error
 from app.services.ai.base import AIError
 from app.services.spotify.base import SpotifyError
@@ -88,3 +88,4 @@ app.include_router(spotify.router)
 app.include_router(catalog.router)
 app.include_router(telemetry.router)
 app.include_router(feedback.router)
+app.include_router(share.router)

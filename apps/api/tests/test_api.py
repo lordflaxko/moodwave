@@ -355,3 +355,68 @@ def test_deleting_playlist_removes_uploaded_cover(demo_client):
     path = demo_client.put(f"/playlists/{playlist['id']}/cover/image", json=body).json()["cover"]["images"][0]
     assert demo_client.delete(f"/playlists/{playlist['id']}").status_code == 204
     assert demo_client.get(path).status_code == 404
+
+
+def test_share_link_lifecycle(demo_client):
+    playlist = _make_playlist(demo_client)
+    shared = demo_client.post(f"/playlists/{playlist['id']}/share").json()
+    slug = shared["share_slug"]
+    assert slug and demo_client.post(f"/playlists/{playlist['id']}/share").json()["share_slug"] == slug
+
+    demo_client.cookies.clear()  # public from here on
+    public = demo_client.get(f"/share/{slug}")
+    assert public.status_code == 200
+    body = public.json()
+    assert body["title"] == playlist["title"] and len(body["tracks"]) == len(playlist["tracks"])
+    assert "spotify_playlist_id" not in body and "user_id" not in body
+
+    page = demo_client.get(f"/s/{slug}")
+    assert page.status_code == 200 and page.headers["content-type"].startswith("text/html")
+    assert 'property="og:title"' in page.text and f"/s/{slug}/cover.jpg" in page.text
+    assert f"/p?s={slug}" in page.text
+
+
+def test_share_link_escapes_and_revokes(demo_client):
+    res = demo_client.post("/playlists/generate", json={"prompt": '<script>alert("x")</script> beach', "length": 15})
+    playlist = res.json()
+    slug = demo_client.post(f"/playlists/{playlist['id']}/share").json()["share_slug"]
+    page = demo_client.get(f"/s/{slug}").text
+    assert "<script>alert" not in page
+    assert demo_client.delete(f"/playlists/{playlist['id']}/share").json()["share_slug"] is None
+    assert demo_client.get(f"/share/{slug}").status_code == 404
+    assert demo_client.get(f"/s/{slug}").status_code == 404
+
+
+def test_shared_cover_uses_uploaded_image(demo_client):
+    import base64
+    import io
+
+    from PIL import Image
+
+    playlist = _make_playlist(demo_client)
+    buffer = io.BytesIO()
+    Image.new("RGB", (300, 300), (40, 160, 90)).save(buffer, "JPEG")
+    demo_client.put(
+        f"/playlists/{playlist['id']}/cover/image", json={"image": base64.b64encode(buffer.getvalue()).decode()}
+    )
+    slug = demo_client.post(f"/playlists/{playlist['id']}/share").json()["share_slug"]
+    cover = demo_client.get(f"/s/{slug}/cover.jpg")
+    assert cover.status_code == 200 and cover.headers["content-type"] == "image/jpeg"
+
+
+def test_duplicate_makes_private_copy(demo_client):
+    playlist = _make_playlist(demo_client)
+    demo_client.post(f"/playlists/{playlist['id']}/share")
+    copy = demo_client.post(f"/playlists/{playlist['id']}/duplicate")
+    assert copy.status_code == 201
+    body = copy.json()
+    assert body["id"] != playlist["id"] and body["title"].endswith("(copy)")
+    assert [t["id"] for t in body["tracks"]] == [t["id"] for t in playlist["tracks"]]
+    assert body["share_slug"] is None and body["spotify_playlist_id"] is None
+
+
+def test_summary_lists_artists_and_genres(demo_client):
+    playlist = _make_playlist(demo_client)
+    summary = next(p for p in demo_client.get("/playlists").json() if p["id"] == playlist["id"])
+    assert summary["artists"] and summary["artists"][0] in {a for t in playlist["tracks"] for a in t["artists"]}
+    assert isinstance(summary["genres"], list)
