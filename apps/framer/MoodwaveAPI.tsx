@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react"
+import { AnimatePresence, motion } from "framer-motion"
+import { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 
 /**
  * Shared client for the Moodwave API: the API address, bearer-token session, types and
@@ -649,5 +651,139 @@ export function SoundToggle({ accent = C.lilac }: { accent?: string }) {
             </span>
             Sound {enabled ? "on" : "off"}
         </button>
+    )
+}
+
+// --- Shared Spotify player ------------------------------------------------------------------
+// One Spotify iFrame-API player per page, docked at the bottom. The showcase rows
+// (TrackPlay) and the playlist page both drive it. Signed-out listeners get previews;
+// listeners signed in to Spotify in the browser get full tracks.
+
+interface SpotifyController {
+    loadUri: (uri: string) => void
+    play: () => void
+    togglePlay: () => void
+    destroy?: () => void
+    addListener: (event: string, cb: (e: { data: { isPaused: boolean } }) => void) => void
+}
+type SpotifyIframeApi = { createController: (el: HTMLElement, opts: object, cb: (c: SpotifyController) => void) => void }
+
+export interface PlayerState {
+    id: string | null
+    label: string
+    playing: boolean
+}
+let playerState: PlayerState = { id: null, label: "", playing: false }
+const playerListeners = new Set<(s: PlayerState) => void>()
+const setPlayer = (patch: Partial<PlayerState>) => {
+    playerState = { ...playerState, ...patch }
+    playerListeners.forEach((fn) => fn(playerState))
+}
+let spotifyController: SpotifyController | null = null
+let iframeApi: Promise<SpotifyIframeApi> | null = null
+
+function loadIframeApi(): Promise<SpotifyIframeApi> {
+    iframeApi ??= new Promise((resolve) => {
+        const w = window as unknown as { onSpotifyIframeApiReady?: (api: SpotifyIframeApi) => void }
+        w.onSpotifyIframeApiReady = (api) => resolve(api)
+        const script = document.createElement("script")
+        script.src = "https://open.spotify.com/embed/iframe-api/v1"
+        script.async = true
+        document.body.appendChild(script)
+    })
+    return iframeApi
+}
+
+export function usePlayer(): PlayerState {
+    const [state, setState] = useState(playerState)
+    useEffect(() => {
+        playerListeners.add(setState)
+        setState(playerState)
+        return () => {
+            playerListeners.delete(setState)
+        }
+    }, [])
+    return state
+}
+
+/**
+ * Play a track (call from a click). The same track toggles play/pause; another track swaps
+ * in place. The first play opens the dock, which creates the player.
+ */
+export function requestPlay(id: string, label: string) {
+    if (playerState.id === id && spotifyController) {
+        spotifyController.togglePlay()
+        return
+    }
+    setPlayer({ id, label, playing: false })
+    if (spotifyController) {
+        spotifyController.loadUri(`spotify:track:${id}`)
+        spotifyController.play()
+    }
+}
+
+export function closePlayer() {
+    spotifyController?.destroy?.()
+    spotifyController = null
+    setPlayer({ id: null, label: "", playing: false })
+}
+
+/** Render once per page. Shows while something is playing; owns the Spotify iframe. */
+export function PlayerDock({ accent = C.lilac, bottom = 16 }: { accent?: string; bottom?: number }) {
+    const state = usePlayer()
+    const [mounted, setMounted] = useState(false)
+    const mount = useRef<HTMLDivElement>(null)
+    useEffect(() => setMounted(true), [])
+    useEffect(() => () => closePlayer(), [])
+
+    // First play: create the player inside the dock once it has rendered.
+    useEffect(() => {
+        if (!state.id || spotifyController || !mount.current) return
+        const el = mount.current
+        const uri = `spotify:track:${state.id}`
+        let cancelled = false
+        loadIframeApi().then((api) => {
+            if (cancelled || spotifyController) return
+            api.createController(el, { uri, width: "100%", height: 80, theme: "dark" }, (c) => {
+                spotifyController = c
+                c.addListener("ready", () => c.play())
+                c.addListener("playback_update", (e) => setPlayer({ playing: !e.data.isPaused }))
+            })
+        })
+        return () => {
+            cancelled = true
+        }
+    }, [state.id])
+
+    if (!mounted) return null
+    return createPortal(
+        <AnimatePresence>
+            {state.id ? (
+                <motion.div
+                    key="dock"
+                    initial={{ y: 120, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    exit={{ y: 120, opacity: 0 }}
+                    transition={{ duration: 0.5, ease: EASE }}
+                    style={{ position: "fixed", left: 16, right: 16, bottom, zIndex: 40, display: "flex", justifyContent: "center", pointerEvents: "none" }}
+                >
+                    <div style={{ pointerEvents: "auto", width: "100%", maxWidth: 560, borderRadius: 16, overflow: "hidden", background: C.surface, border: `1px solid ${C.line2}`, boxShadow: "0 30px 80px -20px rgba(0,0,0,0.9)" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "8px 10px 8px 14px", fontFamily: SANS, fontSize: 12.5, color: C.subtle }}>
+                            <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                                <span style={{ width: 6, height: 6, borderRadius: 6, background: state.playing ? accent : C.faint, flexShrink: 0, transition: "background 0.3s ease" }} />
+                                <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                    {state.playing ? "Now playing" : "Ready"} · {state.label}
+                                </span>
+                            </span>
+                            <button type="button" onClick={closePlayer} aria-label="Close player" style={{ width: 24, height: 24, flexShrink: 0, borderRadius: 24, border: "none", background: C.surface3, color: C.text, cursor: "pointer", lineHeight: 1 }}>
+                                ×
+                            </button>
+                        </div>
+                        <div ref={mount} />
+                    </div>
+                </motion.div>
+            ) : null}
+        </AnimatePresence>,
+        document.body,
     )
 }

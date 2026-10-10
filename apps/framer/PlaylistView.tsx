@@ -15,6 +15,9 @@ import {
     SANS,
     SERIF,
     signIn,
+    PlayerDock,
+    requestPlay,
+    usePlayer,
     useSession,
     type Playlist,
     type Track,
@@ -122,52 +125,6 @@ function Equalizer({ color }: { color: string }) {
     )
 }
 
-function Player({ track, onClose }: { track: Track; onClose: () => void }) {
-    const id = track.uri.split(":").pop()
-    return createPortal(
-        <motion.div
-            initial={{ y: 120, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 120, opacity: 0 }}
-            transition={{ duration: 0.5, ease: EASE }}
-            style={{ position: "fixed", left: 16, right: 16, bottom: 16, zIndex: 40, display: "flex", justifyContent: "center", pointerEvents: "none" }}
-        >
-            <div
-                style={{
-                    pointerEvents: "auto",
-                    width: "100%",
-                    maxWidth: 560,
-                    position: "relative",
-                    borderRadius: 16,
-                    overflow: "hidden",
-                    boxShadow: "0 30px 80px -20px rgba(0,0,0,0.9)",
-                    border: `1px solid ${C.line2}`,
-                    background: C.surface,
-                }}
-            >
-                <iframe
-                    title={`Play ${track.title}`}
-                    src={`https://open.spotify.com/embed/track/${id}?utm_source=moodwave&theme=0`}
-                    width="100%"
-                    height="80"
-                    style={{ display: "block", border: 0 }}
-                    allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-                    loading="lazy"
-                />
-                <button
-                    type="button"
-                    onClick={onClose}
-                    aria-label="Close player"
-                    style={{ position: "absolute", top: 6, right: 6, width: 26, height: 26, borderRadius: 26, border: "none", background: "rgba(11,10,13,0.7)", color: C.text, cursor: "pointer", fontSize: 14 }}
-                >
-                    ×
-                </button>
-            </div>
-        </motion.div>,
-        document.body,
-    )
-}
-
 function Skeleton({ narrow }: { narrow: boolean }) {
     const block = (w: number | string, h: number, r = 10): CSSProperties => ({ width: w, height: h, borderRadius: r, background: C.surface2 })
     return (
@@ -201,7 +158,7 @@ export default function PlaylistView(props: PlaylistViewProps) {
     const [notice, setNotice] = useState<string | null>(null)
     const [busy, setBusy] = useState<string | null>(null)
     const [custom, setCustom] = useState("")
-    const [playing, setPlaying] = useState<Track | null>(null)
+    const player = usePlayer()
     const [flash, setFlash] = useState<string | null>(null)
     const [hovered, setHovered] = useState<string | null>(null)
     const [fresh, setFresh] = useState<Set<string>>(new Set())
@@ -400,8 +357,21 @@ export default function PlaylistView(props: PlaylistViewProps) {
                         <a href={createPath} style={{ ...pill, height: 42, textDecoration: "none" }}>
                             New playlist
                         </a>
-                        <button type="button" onClick={remove} disabled={Boolean(busy)} style={{ ...pill, height: 42, color: C.faint }}>
-                            Delete
+                        <button
+                            type="button"
+                            onClick={remove}
+                            disabled={Boolean(busy)}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.color = C.amber
+                                e.currentTarget.style.borderColor = `color-mix(in srgb, ${C.amber} 45%, transparent)`
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.color = C.muted
+                                e.currentTarget.style.borderColor = C.line2
+                            }}
+                            style={{ ...pill, height: 42, color: C.muted, transition: "color 0.2s ease, border-color 0.2s ease" }}
+                        >
+                            {busy === "delete" ? "Deleting…" : "Delete"}
                         </button>
                     </div>
                 </div>
@@ -455,7 +425,7 @@ export default function PlaylistView(props: PlaylistViewProps) {
                 <ol style={{ listStyle: "none", margin: 0, padding: 0 }}>
                     {playlist.tracks.map((t: Track, i: number) => {
                         const playable = isSpotifyTrack(t)
-                        const active = playing?.id === t.id
+                        const active = player.id === t.uri.split(":").pop()
                         const isNew = fresh.has(t.id)
                         return (
                             <motion.li
@@ -464,7 +434,7 @@ export default function PlaylistView(props: PlaylistViewProps) {
                                 initial={{ opacity: 0, y: 10 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ duration: 0.5, ease: EASE, delay: Math.min(i, 12) * 0.03 }}
-                                onClick={() => playable && setPlaying(t)}
+                                onClick={() => playable && requestPlay(t.uri.split(":").pop() ?? t.id, `${t.title} — ${t.artists.join(", ")}`)}
                                 onPointerEnter={() => setHovered(t.id)}
                                 onPointerLeave={() => setHovered((h) => (h === t.id ? null : h))}
                                 whileHover={{ backgroundColor: C.surface2 }}
@@ -481,7 +451,7 @@ export default function PlaylistView(props: PlaylistViewProps) {
                                 }}
                             >
                                 <span style={{ fontFamily: MONO, fontSize: 12, color: active ? accent : C.faint, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                                    {active ? <Equalizer color={accent} /> : hovered === t.id && playable ? <span style={{ color: C.text }}>▶</span> : String(i + 1).padStart(2, "0")}
+                                    {active && player.playing ? <Equalizer color={accent} /> : active ? <span style={{ color: accent }}>▶</span> : hovered === t.id && playable ? <span style={{ color: C.text }}>▶</span> : String(i + 1).padStart(2, "0")}
                                 </span>
                                 {t.image_url ? (
                                     <img src={t.image_url} alt="" width={narrow ? 44 : 48} height={narrow ? 44 : 48} style={{ borderRadius: 8, objectFit: "cover", display: "block" }} />
@@ -578,7 +548,7 @@ export default function PlaylistView(props: PlaylistViewProps) {
                 document.body,
             )}
 
-            <AnimatePresence>{playing ? <Player key={playing.id} track={playing} onClose={() => setPlaying(null)} /> : null}</AnimatePresence>
+            <PlayerDock accent={accent} />
 
             {flash
                 ? createPortal(
@@ -586,7 +556,7 @@ export default function PlaylistView(props: PlaylistViewProps) {
                           role="status"
                           initial={{ opacity: 0, y: 12 }}
                           animate={{ opacity: 1, y: 0 }}
-                          style={{ position: "fixed", left: 16, right: 16, bottom: playing ? 116 : 24, zIndex: 45, display: "flex", justifyContent: "center", pointerEvents: "none" }}
+                          style={{ position: "fixed", left: 16, right: 16, bottom: player.id ? 140 : 24, zIndex: 45, display: "flex", justifyContent: "center", pointerEvents: "none" }}
                       >
                           <span style={{ padding: "12px 18px", borderRadius: 100, background: C.surface3, border: `1px solid ${C.line2}`, color: C.text, fontFamily: SANS, fontSize: 14, boxShadow: "0 20px 50px -20px rgba(0,0,0,0.9)" }}>{flash}</span>
                       </motion.div>,

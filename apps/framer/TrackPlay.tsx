@@ -1,9 +1,8 @@
 import { addPropertyControls, ControlType, useIsStaticRenderer } from "framer"
-import { AnimatePresence, motion } from "framer-motion"
+import { motion } from "framer-motion"
 import { useEffect, useState, type CSSProperties } from "react"
-import { createPortal } from "react-dom"
 
-import { C, EASE, SANS } from "./MoodwaveAPI.tsx"
+import { C, PlayerDock, requestPlay, usePlayer } from "./MoodwaveAPI.tsx"
 
 /**
  * Makes a CMS track row playable. Placed over the row (absolute, full size), it is an
@@ -24,108 +23,8 @@ interface TrackPlayProps {
     style?: CSSProperties
 }
 
-// --- Shared player store (one player for every row on the page) ---------------------------
-interface SpotifyController {
-    loadUri: (uri: string) => void
-    play: () => void
-    togglePlay: () => void
-    destroy?: () => void
-    addListener: (event: string, cb: (e: { data: { isPaused: boolean; position: number; duration: number } }) => void) => void
-}
-interface PlayerState {
-    id: string | null
-    label: string
-    playing: boolean
-}
-let player: PlayerState = { id: null, label: "", playing: false }
-const listeners = new Set<(s: PlayerState) => void>()
-const set = (patch: Partial<PlayerState>) => {
-    player = { ...player, ...patch }
-    listeners.forEach((fn) => fn(player))
-}
-
-let controller: SpotifyController | null = null
-let apiPromise: Promise<{ createController: (el: HTMLElement, opts: object, cb: (c: SpotifyController) => void) => void }> | null = null
-
-function loadIframeApi() {
-    apiPromise ??= new Promise((resolve) => {
-        const w = window as unknown as { onSpotifyIframeApiReady?: (api: never) => void }
-        w.onSpotifyIframeApiReady = (api) => resolve(api)
-        const script = document.createElement("script")
-        script.src = "https://open.spotify.com/embed/iframe-api/v1"
-        script.async = true
-        document.body.appendChild(script)
-    })
-    return apiPromise
-}
-
-/** Called from a click, so the browser treats playback as user-initiated. */
-async function playTrack(id: string, label: string, mount: HTMLElement | null) {
-    const uri = `spotify:track:${id}`
-    if (player.id === id && controller) {
-        controller.togglePlay()
-        return
-    }
-    set({ id, label, playing: player.playing && Boolean(controller) })
-    if (controller) {
-        controller.loadUri(uri)
-        controller.play()
-        return
-    }
-    if (!mount) return
-    const api = await loadIframeApi()
-    api.createController(mount, { uri, width: "100%", height: 80, theme: "dark" }, (c) => {
-        controller = c
-        c.addListener("ready", () => c.play())
-        c.addListener("playback_update", (e) => set({ playing: !e.data.isPaused }))
-    })
-}
-
-function closePlayer() {
-    controller?.destroy?.()
-    controller = null
-    set({ id: null, label: "", playing: false })
-}
-
-function usePlayer() {
-    const [state, setState] = useState(player)
-    useEffect(() => {
-        listeners.add(setState)
-        return () => {
-            listeners.delete(setState)
-        }
-    }, [])
-    return state
-}
-
-// The dock (and the Spotify iframe inside it) is rendered by one row for the whole page,
-// so switching songs reuses the same player instead of tearing it down.
+// The dock is rendered by one row for the whole page (see PlayerDock in MoodwaveAPI).
 let dockOwner: symbol | null = null
-function Dock({ label, accent }: { label: string; accent: string }) {
-    return createPortal(
-        <motion.div
-            initial={{ y: 120, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 120, opacity: 0 }}
-            transition={{ duration: 0.5, ease: EASE }}
-            style={{ position: "fixed", left: 16, right: 16, bottom: 16, zIndex: 40, display: "flex", justifyContent: "center", pointerEvents: "none" }}
-        >
-            <div style={{ pointerEvents: "auto", width: "100%", maxWidth: 560, borderRadius: 16, overflow: "hidden", background: C.surface, border: `1px solid ${C.line2}`, boxShadow: "0 30px 80px -20px rgba(0,0,0,0.9)" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "8px 12px", fontFamily: SANS, fontSize: 12.5, color: C.subtle }}>
-                    <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                        <span style={{ width: 6, height: 6, borderRadius: 6, background: accent, flexShrink: 0 }} />
-                        <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Now playing · {label}</span>
-                    </span>
-                    <button type="button" onClick={closePlayer} aria-label="Close player" style={{ width: 24, height: 24, borderRadius: 24, border: "none", background: C.surface3, color: C.text, cursor: "pointer" }}>
-                        ×
-                    </button>
-                </div>
-                <div id="mw-spotify-mount" />
-            </div>
-        </motion.div>,
-        document.body,
-    )
-}
 
 function Bars({ color, playing }: { color: string; playing: boolean }) {
     return (
@@ -166,19 +65,9 @@ export default function TrackPlay(props: TrackPlayProps) {
             setOwner(true)
         }
         return () => {
-            if (dockOwner === token) {
-                dockOwner = null
-                closePlayer()
-            }
+            if (dockOwner === token) dockOwner = null
         }
     }, [isStatic])
-
-    // First play: once the dock has rendered its mount node, create the Spotify player there.
-    useEffect(() => {
-        if (!owner || !state.id || controller) return
-        const mount = document.getElementById("mw-spotify-mount")
-        if (mount) void playTrack(state.id, state.label, mount)
-    }, [owner, state.id, state.label])
 
     if (isStatic) return <div style={{ ...props.style }} aria-hidden />
 
@@ -191,13 +80,7 @@ export default function TrackPlay(props: TrackPlayProps) {
                 aria-pressed={mine && state.playing}
                 onPointerEnter={() => setHover(true)}
                 onPointerLeave={() => setHover(false)}
-                onClick={() => {
-                    if (!spotifyId) return
-                    // With a player already open this plays straight away (inside the click);
-                    // otherwise it opens the dock and the owner row creates the player.
-                    if (controller) void playTrack(spotifyId, label, null)
-                    else set({ id: spotifyId, label, playing: false })
-                }}
+                onClick={() => spotifyId && requestPlay(spotifyId, label)}
                 style={{ ...props.style, position: "relative", display: "block", border: "none", padding: 0, margin: 0, background: "transparent", cursor: spotifyId ? "pointer" : "default", borderRadius: 14 }}
             >
                 <span
@@ -220,7 +103,7 @@ export default function TrackPlay(props: TrackPlayProps) {
                     {mine ? <Bars color={accent} playing={state.playing} /> : "▶"}
                 </span>
             </button>
-            <AnimatePresence>{owner && state.id ? <Dock key="dock" label={state.label} accent={accent} /> : null}</AnimatePresence>
+            {owner ? <PlayerDock accent={accent} /> : null}
         </>
     )
 }
