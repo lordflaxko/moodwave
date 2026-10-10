@@ -23,7 +23,8 @@ paste it into the matching code file in the Framer project (or the other way rou
 | `SpinRecord.tsx` | Home | Draggable record; lands on a mood and offers to compose it |
 | `RecordSleeve.tsx` | Artist cards | Record that slides out of the card on hover (reads `--sleeve`) |
 | `Waveform.tsx` | Home, layout template | Oscilloscope line reacting to the pointer and scroll speed |
-| `MiniEq.tsx` | Showcase track rows | Bars that play on row hover (reads `--eq`) |
+| `TrackPlay.tsx` | Showcase track rows | Click a row to play it in a shared Spotify player (iFrame API); bars show while playing. Needs each row's "Spotify ID" CMS field |
+| `MiniEq.tsx` | (unused) | Hover-only bars, replaced by `TrackPlay` |
 | `Overrides.tsx` | Cards, CTAs, nav, rows | `withTilt`, `withTiltGlare`, `withMagnetic`, `withSleeve`, `withTrackHover`, `withNavCondense` |
 
 Every motion piece checks `prefers-reduced-motion`, and pointer-only effects check
