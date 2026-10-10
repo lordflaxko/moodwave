@@ -2,7 +2,7 @@ import { addPropertyControls, ControlType, useIsStaticRenderer } from "framer"
 import { AnimatePresence, motion, useMotionValue, useReducedMotion } from "framer-motion"
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react"
 
-import { C, EASE, MONO, SANS, SERIF, scratch, SoundToggle } from "./MoodwaveAPI.tsx"
+import { C, EASE, MONO, needleDrop, SANS, scratch, SERIF, SoundToggle, spinTone, stopSpinTone } from "./MoodwaveAPI.tsx"
 
 /**
  * "Can't decide?" — a record you can grab, scratch and fling. When it stops, the tonearm
@@ -80,6 +80,8 @@ export default function SpinRecord(props: SpinRecordProps) {
     const [landed, setLanded] = useState<number | null>(null)
     const seg = 360 / moods.length
 
+    useEffect(() => () => stopSpinTone(), [])
+
     const moodUnderNeedle = (rot: number) => Math.floor(mod(NEEDLE - rot, 360) / seg) % moods.length
 
     // Idle: a slow 33⅓-ish turn so it reads as a record, until someone touches it.
@@ -110,6 +112,8 @@ export default function SpinRecord(props: SpinRecordProps) {
             rotation.set(from + (target - from) * eased)
             if (t < 1) raf.current = requestAnimationFrame(glide)
             else {
+                stopSpinTone()
+                needleDrop()
                 setLanded(index)
                 setPhase("landed")
             }
@@ -133,10 +137,7 @@ export default function SpinRecord(props: SpinRecordProps) {
             prev = now
             spin.current *= Math.pow(0.9965, dt)
             rotation.set(rotation.get() + spin.current * dt)
-            if (now - lastScratch.current > 70) {
-                lastScratch.current = now
-                scratch(spin.current / 1.6)
-            }
+            spinTone(Math.abs(spin.current) / 2)
             if (Math.abs(spin.current) < 0.04) settle()
             else raf.current = requestAnimationFrame(tick)
         }
@@ -168,7 +169,8 @@ export default function SpinRecord(props: SpinRecordProps) {
         d.velocity = d.velocity * 0.6 + (delta / dt) * 0.4
         d.angle = angle
         d.time = now
-        if (now - lastScratch.current > 50) {
+        spinTone(Math.abs(d.velocity) / 1.6)
+        if (now - lastScratch.current > 55 && Math.abs(delta) > 0.6) {
             lastScratch.current = now
             scratch(d.velocity / 1.2)
         }

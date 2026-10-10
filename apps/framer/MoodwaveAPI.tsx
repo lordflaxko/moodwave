@@ -430,6 +430,7 @@ export function setSound(on: boolean) {
         void audioCtx?.resume()
     } else {
         stopPad()
+        stopSpinTone()
         void audioCtx?.suspend()
     }
     soundListeners.forEach((fn) => fn(on))
@@ -536,26 +537,99 @@ export function stopPad() {
     window.setTimeout(() => p.oscs.forEach((o) => o.stop()), 800)
 }
 
-/** A short vinyl scratch whose pitch follows how fast the record is moving. */
+/** A vinyl scratch whose pitch and loudness follow how fast the record is moving. */
 export function scratch(velocity: number) {
     if (!soundOn || !audioCtx || !master || !noise) return
     const v = Math.min(1, Math.abs(velocity))
-    if (v < 0.02) return
+    if (v < 0.03) return
     const now = audioCtx.currentTime
     const src = audioCtx.createBufferSource()
     src.buffer = noise
     const band = audioCtx.createBiquadFilter()
     band.type = "bandpass"
-    band.Q.value = 6
-    band.frequency.value = 300 + v * 2400
+    band.Q.value = 1.4
+    band.frequency.setValueAtTime(500 + v * 2600, now)
+    // The "wick-wick": pitch slides down over the burst, like a hand pulling the record.
+    band.frequency.exponentialRampToValueAtTime(250 + v * 900, now + 0.11)
     const g = audioCtx.createGain()
     g.gain.setValueAtTime(0.0001, now)
-    g.gain.exponentialRampToValueAtTime(0.25 * v + 0.02, now + 0.01)
-    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.07)
+    g.gain.exponentialRampToValueAtTime(1.1 * v + 0.15, now + 0.012)
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.12)
     src.connect(band)
     band.connect(g)
     g.connect(master)
-    src.start(now, Math.random() * 0.8, 0.08)
+    src.start(now, Math.random() * 0.8, 0.13)
+}
+
+interface SpinVoice {
+    oscs: OscillatorNode[]
+    filter: BiquadFilterNode
+    gain: GainNode
+}
+let spinVoice: SpinVoice | null = null
+const SPIN_NOTES = [196.0, 246.94, 293.66] // G major: a warm chord the platter "plays"
+
+/**
+ * The record "playing": a chord whose pitch and volume follow the platter's speed, so a
+ * fling sounds like a turntable winding down (tape stop). `rate` ≈ 1 is full speed.
+ */
+export function spinTone(rate: number) {
+    if (!soundOn) return
+    ensureAudio()
+    const ctx = audioCtx
+    if (!ctx || !master) return
+    const r = Math.max(0, Math.min(1.3, rate))
+    const now = ctx.currentTime
+    if (!spinVoice) {
+        const filter = ctx.createBiquadFilter()
+        filter.type = "lowpass"
+        filter.frequency.value = 1400
+        const gain = ctx.createGain()
+        gain.gain.value = 0
+        filter.connect(gain)
+        gain.connect(master)
+        const oscs = SPIN_NOTES.map((f, i) => {
+            const o = ctx.createOscillator()
+            o.type = i === 0 ? "sawtooth" : "triangle"
+            o.frequency.value = f
+            o.connect(filter)
+            o.start()
+            return o
+        })
+        spinVoice = { oscs, filter, gain }
+    }
+    const voice = spinVoice
+    voice.oscs.forEach((o, i) => o.frequency.setTargetAtTime(SPIN_NOTES[i] * (0.3 + 0.7 * Math.min(1, r)), now, 0.04))
+    voice.filter.frequency.setTargetAtTime(500 + 1500 * Math.min(1, r), now, 0.05)
+    voice.gain.gain.setTargetAtTime(0.42 * Math.min(1, r * 1.4), now, 0.05)
+}
+
+export function stopSpinTone() {
+    if (!spinVoice || !audioCtx) return
+    const voice = spinVoice
+    spinVoice = null
+    voice.gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.08)
+    window.setTimeout(() => voice.oscs.forEach((o) => o.stop()), 600)
+}
+
+/** The needle landing: a soft thump and a little surface crackle. */
+export function needleDrop() {
+    if (!soundOn || !audioCtx || !master || !noise) return
+    const now = audioCtx.currentTime
+    kick(now + 0.01, 0.9)
+    const src = audioCtx.createBufferSource()
+    src.buffer = noise
+    const lp = audioCtx.createBiquadFilter()
+    lp.type = "highpass"
+    lp.frequency.value = 2500
+    const g = audioCtx.createGain()
+    g.gain.setValueAtTime(0.0001, now)
+    g.gain.exponentialRampToValueAtTime(0.35, now + 0.02)
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.6)
+    src.connect(lp)
+    lp.connect(g)
+    g.connect(master)
+    src.start(now, Math.random() * 0.4, 0.6)
 }
 
 /** The small "♪ Sound" pill shared by the mixer and the record. */
