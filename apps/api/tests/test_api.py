@@ -420,3 +420,8 @@ def test_summary_lists_artists_and_genres(demo_client):
     summary = next(p for p in demo_client.get("/playlists").json() if p["id"] == playlist["id"])
     assert summary["artists"] and summary["artists"][0] in {a for t in playlist["tracks"] for a in t["artists"]}
     assert isinstance(summary["genres"], list)
+
+
+def test_health_answers_head_for_uptime_monitors(client):
+    assert client.get("/health").json() == {"status": "ok"}
+    assert client.head("/health").status_code == 200

@@ -77,7 +77,8 @@ async def unhandled_error_handler(request: Request, exc: Exception) -> JSONRespo
     return JSONResponse({"detail": "Something went wrong on our side. It's been logged."}, status_code=500)
 
 
-@app.get("/health", tags=["meta"])
+# HEAD too: uptime monitors (UptimeRobot) check with HEAD by default.
+@app.api_route("/health", methods=["GET", "HEAD"], tags=["meta"])
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
