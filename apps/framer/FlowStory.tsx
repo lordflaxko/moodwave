@@ -47,6 +47,7 @@ const eyebrow: CSSProperties = { fontFamily: MONO, fontSize: 11, letterSpacing: 
 const card: CSSProperties = {
     position: "relative",
     width: "100%",
+    boxSizing: "border-box",
     borderRadius: 24,
     padding: 24,
     background: C.surface,
@@ -210,7 +211,7 @@ function Visual({ step, accent }: { step: number; accent: string }) {
     return (
         <div style={card}>
             <div aria-hidden style={{ position: "absolute", inset: -120, background: `radial-gradient(closest-side at 80% 0%, color-mix(in srgb, ${accent} 14%, transparent), transparent)`, pointerEvents: "none" }} />
-            <div style={{ position: "relative", display: "grid", minHeight: 260 }}>
+            <div style={{ position: "relative", display: "grid", gridTemplateColumns: "minmax(0, 1fr)", minHeight: 260 }}>
                 {all.map((view, i) => (
                     <motion.div
                         key={i}
@@ -218,7 +219,7 @@ function Visual({ step, accent }: { step: number; accent: string }) {
                         initial={false}
                         animate={{ opacity: i === step ? 1 : 0, y: i === step ? 0 : i < step ? -10 : 10 }}
                         transition={{ duration: 0.4, ease: EASE }}
-                        style={{ gridArea: "1 / 1", pointerEvents: i === step ? "auto" : "none" }}
+                        style={{ gridArea: "1 / 1", minWidth: 0, pointerEvents: i === step ? "auto" : "none" }}
                     >
                         <div key={i === step ? `on-${i}` : `off-${i}`}>{view}</div>
                     </motion.div>
