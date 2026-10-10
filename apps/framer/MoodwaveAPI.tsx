@@ -104,6 +104,8 @@ export interface Playlist {
     /** Saved to Spotify, then edited here since. */
     needs_sync?: boolean
     cover?: PlaylistCoverChoice
+    /** Public read-only link is `${API_URL}/s/${share_slug}`; null when sharing is off. */
+    share_slug?: string | null
 }
 export interface PlaylistCoverChoice {
     mode: "auto" | "grid" | "single" | "upload"
@@ -918,6 +920,27 @@ export function PlayerDock({ accent = C.lilac, bottom = 16 }: { accent?: string;
         </AnimatePresence>,
         document.body,
     )
+}
+
+// --- Prefill the composer ----------------------------------------------------------------
+// Suggestion chips (recent prompts, "for right now") fill the prompt box on the same page;
+// with no composer on the page they open the create page with the prompt instead.
+
+let composersMounted = 0
+export function registerComposer(): () => void {
+    composersMounted++
+    return () => {
+        composersMounted--
+    }
+}
+
+export function prefillComposer(prompt: string, createPath = "/create") {
+    if (typeof window === "undefined") return
+    if (composersMounted > 0) {
+        window.dispatchEvent(new CustomEvent("mw:prefill", { detail: { prompt } }))
+        return
+    }
+    window.location.href = `${createPath}?prompt=${encodeURIComponent(prompt)}`
 }
 
 // --- Track feedback (thumbs up/down) -------------------------------------------------------

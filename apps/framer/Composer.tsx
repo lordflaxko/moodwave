@@ -8,7 +8,7 @@ import {
     type CSSProperties,
 } from "react"
 
-import { Safe, useSession } from "./MoodwaveAPI.tsx"
+import { registerComposer, Safe, useSession } from "./MoodwaveAPI.tsx"
 
 /** Accent at an opacity; works for hex, rgb() or hsl() values from the colour control. */
 const mix = (color: string, amount: string) => `color-mix(in srgb, ${color} ${amount}, transparent)`
@@ -220,6 +220,28 @@ function ComposerInner(props: ComposerProps) {
     const ready = value.trim().length >= 3 || Boolean(seed)
 
     useEffect(() => setTaste(readTaste()), [])
+
+    // Suggestion chips elsewhere on the page fill this box (see prefillComposer).
+    useEffect(() => {
+        if (isStatic) return
+        const unregister = registerComposer()
+        const onPrefill = (e: Event) => {
+            const prompt = (e as CustomEvent<{ prompt: string }>).detail?.prompt
+            if (!prompt) return
+            setValue(prompt.slice(0, 500))
+            const el = textareaRef.current
+            if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "center" })
+                el.focus({ preventScroll: true })
+                window.setTimeout(() => el.setSelectionRange(el.value.length, el.value.length), 0)
+            }
+        }
+        window.addEventListener("mw:prefill", onPrefill)
+        return () => {
+            unregister()
+            window.removeEventListener("mw:prefill", onPrefill)
+        }
+    }, [isStatic])
 
     const toggleTaste = () => {
         const next = !taste

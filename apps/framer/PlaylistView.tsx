@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties, type FocusEvent, type 
 import { createPortal } from "react-dom"
 
 import {
+    API_URL,
     api,
     C,
     Collage,
@@ -570,6 +571,119 @@ function CoverEditor({ playlist, accent, onClose, onSaved }: { playlist: Playlis
     )
 }
 
+function SharePanel({ playlist, accent, onClose, onChange }: { playlist: Playlist; accent: string; onClose: () => void; onChange: (p: Playlist) => void }) {
+    const [busy, setBusy] = useState(false)
+    const [copied, setCopied] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const link = playlist.share_slug ? `${API_URL}/s/${playlist.share_slug}` : null
+    const ref = useRef<HTMLDivElement>(null)
+
+    // Opening the panel turns sharing on (the same link comes back if it already exists).
+    useEffect(() => {
+        if (playlist.share_slug) return
+        setBusy(true)
+        api<Playlist>(`/playlists/${playlist.id}/share`, { method: "POST" })
+            .then(onChange)
+            .catch((e: Error) => setError(e.message))
+            .finally(() => setBusy(false))
+    }, [])
+
+    useEffect(() => {
+        const close = (e: PointerEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+        }
+        const key = (e: KeyboardEvent) => e.key === "Escape" && onClose()
+        window.addEventListener("pointerdown", close)
+        window.addEventListener("keydown", key)
+        return () => {
+            window.removeEventListener("pointerdown", close)
+            window.removeEventListener("keydown", key)
+        }
+    }, [])
+
+    const copy = async () => {
+        if (!link) return
+        try {
+            await navigator.clipboard.writeText(link)
+        } catch {
+            const input = ref.current?.querySelector("input")
+            input?.select()
+            document.execCommand?.("copy")
+        }
+        setCopied(true)
+        window.setTimeout(() => setCopied(false), 1800)
+    }
+
+    const nativeShare = async () => {
+        if (!link) return
+        try {
+            await navigator.share({ title: playlist.title, text: `“${playlist.prompt}” — a playlist I made with Moodwave`, url: link })
+        } catch {
+            // Dismissed.
+        }
+    }
+
+    const revoke = async () => {
+        setBusy(true)
+        try {
+            onChange(await api<Playlist>(`/playlists/${playlist.id}/share`, { method: "DELETE" }))
+            onClose()
+        } catch (e) {
+            setError((e as Error).message)
+        } finally {
+            setBusy(false)
+        }
+    }
+
+    const canNativeShare = typeof navigator !== "undefined" && typeof navigator.share === "function"
+    return (
+        <motion.div
+            ref={ref}
+            role="dialog"
+            aria-label="Share this playlist"
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.25, ease: EASE }}
+            style={{ position: "absolute", top: "calc(100% + 10px)", left: 0, zIndex: 20, width: 360, maxWidth: "calc(100vw - 32px)", padding: 16, borderRadius: 18, background: C.surface3, border: `1px solid ${C.line2}`, boxShadow: "0 30px 70px -24px rgba(0,0,0,0.95)", fontFamily: SANS, boxSizing: "border-box" }}
+        >
+            <div style={{ ...eyebrow, marginBottom: 10 }}>Anyone with the link can listen</div>
+            <div style={{ display: "flex", gap: 6 }}>
+                <input
+                    readOnly
+                    value={link ?? (busy ? "Making a link…" : "")}
+                    aria-label="Share link"
+                    onFocus={(e) => e.currentTarget.select()}
+                    style={{ flex: 1, minWidth: 0, height: 40, borderRadius: 100, border: `1px solid ${C.line2}`, background: C.ink, color: C.text, padding: "0 14px", fontFamily: MONO, fontSize: 12, outline: "none" }}
+                />
+                <button type="button" disabled={!link} onClick={() => void copy()} style={{ ...pill, height: 40, background: accent, color: C.ink, border: "none", fontWeight: 500 }}>
+                    {copied ? "Copied ✓" : "Copy"}
+                </button>
+            </div>
+            <p style={{ fontSize: 12.5, lineHeight: 1.5, color: C.subtle, margin: "10px 0 0" }}>Shows the cover and title when pasted into chats. They see the songs and can play them; they can’t edit.</p>
+            {error ? <p style={{ fontSize: 13, color: C.amber, margin: "8px 0 0" }}>{error}</p> : null}
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+                {canNativeShare && link ? (
+                    <button type="button" onClick={() => void nativeShare()} style={{ ...pill, height: 34 }}>
+                        Share…
+                    </button>
+                ) : link ? (
+                    <a href={link} target="_blank" rel="noreferrer" style={{ ...pill, height: 34, textDecoration: "none" }}>
+                        Preview ↗
+                    </a>
+                ) : (
+                    <span />
+                )}
+                {link ? (
+                    <button type="button" disabled={busy} onClick={() => void revoke()} style={{ ...pill, height: 34, color: C.amber, borderColor: "transparent" }}>
+                        Turn off link
+                    </button>
+                ) : null}
+            </div>
+        </motion.div>
+    )
+}
+
 interface Toast {
     message: string
     action?: { label: string; run: () => void }
@@ -609,6 +723,7 @@ function PlaylistViewInner(props: PlaylistViewProps) {
     const [swapping, setSwapping] = useState<string | null>(null)
     const [renaming, setRenaming] = useState(false)
     const [editingCover, setEditingCover] = useState(false)
+    const [sharing, setSharing] = useState(false)
     const [draftTitle, setDraftTitle] = useState("")
     const feedback = useFeedback(Boolean(session.user))
     const saveTimer = useRef(0)
@@ -996,6 +1111,18 @@ function PlaylistViewInner(props: PlaylistViewProps) {
                                 </button>
                             )
                         ) : null}
+                        <span style={{ position: "relative" }}>
+                            <button
+                                type="button"
+                                aria-expanded={sharing}
+                                onClick={() => setSharing((s) => !s)}
+                                style={{ ...pill, height: 42, color: playlist.share_slug ? C.text : C.muted, borderColor: playlist.share_slug ? `color-mix(in srgb, ${accent} 45%, transparent)` : C.line2 }}
+                            >
+                                {playlist.share_slug ? <span style={{ width: 6, height: 6, borderRadius: 6, background: accent }} /> : null}
+                                Share
+                            </button>
+                            <AnimatePresence>{sharing ? <SharePanel key="share" playlist={playlist} accent={accent} onClose={() => setSharing(false)} onChange={setPlaylist} /> : null}</AnimatePresence>
+                        </span>
                         <a href={createPath} style={{ ...pill, height: 42, textDecoration: "none" }}>
                             New playlist
                         </a>
