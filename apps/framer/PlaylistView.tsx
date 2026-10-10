@@ -901,7 +901,7 @@ function PlaylistViewInner(props: PlaylistViewProps) {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={eyebrow}>
-                        AI playlist · {relativeTime(playlist.created_at)} · {playlist.ai_source === "claude" ? "Moodwave AI" : "Quick mix"}
+                        Playlist · {relativeTime(playlist.created_at)} · {playlist.ai_source === "claude" ? "Moodwave AI" : "Quick mix"}
                         {playlist.intent.focus_artists?.length ? ` · Only ${playlist.intent.focus_artists.join(" & ")}` : ""}
                     </div>
                     {renaming ? (
