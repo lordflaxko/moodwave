@@ -170,6 +170,7 @@ class PlaylistOut(BaseModel):
     needs_sync: bool = False
     cover: CoverOut = Field(default_factory=CoverOut)
     share_slug: str | None = None
+    featured: bool = False
 
 
 class PlaylistSummary(BaseModel):
@@ -196,6 +197,8 @@ class UserOut(BaseModel):
     avatar_url: str | None
     is_demo: bool
     is_guest: bool = False
+    # The site owner (dashboard, featuring playlists on Home).
+    is_owner: bool = False
 
 
 class SessionOut(BaseModel):

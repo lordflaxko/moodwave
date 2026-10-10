@@ -51,6 +51,8 @@ class Playlist(SQLModel, table=True):
     synced_at: datetime | None = None
     # Public read-only link (/s/{share_slug}); None when sharing is off.
     share_slug: str | None = Field(default=None, index=True)
+    # Shown in "Made with Moodwave" on Home (owner only, and only while shared).
+    featured_at: datetime | None = None
     # Cover choice: {"mode": "auto" | "grid" | "single" | "upload", "track_ids": [...], "v": version}.
     cover: dict | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     created_at: datetime = Field(default_factory=_now, index=True)
@@ -119,3 +121,12 @@ class PlaylistCover(SQLModel, table=True):
     playlist_id: str = Field(foreign_key="playlist.id", primary_key=True)
     jpeg: bytes = Field(sa_column=Column(LargeBinary, nullable=False))
     updated_at: datetime = Field(default_factory=_now)
+
+
+class AIUsage(SQLModel, table=True):
+    """Tokens the AI used per day (UTC), for the owner dashboard's cost estimate."""
+
+    day: str = Field(primary_key=True)  # YYYY-MM-DD
+    calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0

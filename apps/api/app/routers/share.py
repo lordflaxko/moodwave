@@ -13,7 +13,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from sqlmodel import select
+from sqlmodel import col, select
 
 from app.core.config import get_settings
 from app.deps import DbSession
@@ -62,6 +62,45 @@ def _first_name(db: DbSession, user_id: str) -> str:
     user = db.get(User, user_id)
     name = (user.display_name if user else "") or ""
     return name.split()[0] if name.strip() else "A listener"
+
+
+class FeaturedPlaylistOut(BaseModel):
+    slug: str
+    title: str
+    prompt: str
+    moods: list[str]
+    track_count: int
+    total_duration_ms: int
+    cover_images: list[str | None]
+
+
+@router.get("/share/featured", response_model=list[FeaturedPlaylistOut])
+def featured_playlists(db: DbSession, response: Response) -> list[FeaturedPlaylistOut]:
+    """The owner's picks for "Made with Moodwave" on Home: shared playlists only, newest first."""
+    from app.routers.playlists import _cover_images, _tracks
+
+    rows = db.exec(
+        select(Playlist)
+        .where(col(Playlist.featured_at).is_not(None), col(Playlist.share_slug).is_not(None))
+        .order_by(col(Playlist.featured_at).desc())
+        .limit(9)
+    ).all()
+    out = []
+    for p in rows:
+        tracks = _tracks(p)
+        out.append(
+            FeaturedPlaylistOut(
+                slug=p.share_slug or "",
+                title=p.title,
+                prompt=p.prompt,
+                moods=(p.intent or {}).get("moods", [])[:3],
+                track_count=len(tracks),
+                total_duration_ms=sum(t.duration_ms for t in tracks),
+                cover_images=_cover_images(p, tracks),
+            )
+        )
+    response.headers["Cache-Control"] = "public, max-age=120"
+    return out
 
 
 @router.get("/share/{slug}", response_model=SharedPlaylistOut)

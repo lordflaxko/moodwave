@@ -2,6 +2,7 @@
 
 from sqlmodel import Session, col, select
 
+from app.core.config import get_settings
 from app.models import (
     ClientError,
     Playlist,
@@ -35,3 +36,20 @@ def delete_user_data(db: Session, user: User, *, commit: bool = True) -> None:
     db.delete(user)
     if commit:
         db.commit()
+
+
+def is_owner(db: Session, user: User) -> bool:
+    """The site owner: a Spotify account listed in OWNER_SPOTIFY_IDS, or, when that's unset,
+    the first Spotify account ever created here."""
+    if user.is_demo or user.is_guest or not user.spotify_id:
+        return False
+    owners = {s.strip() for s in get_settings().owner_spotify_ids.split(",") if s.strip()}
+    if owners:
+        return user.spotify_id in owners
+    first = db.exec(
+        select(User)
+        .where(col(User.spotify_id).is_not(None), User.is_demo == False, User.is_guest == False)  # noqa: E712
+        .order_by(col(User.created_at).asc())
+        .limit(1)
+    ).first()
+    return first is not None and first.id == user.id

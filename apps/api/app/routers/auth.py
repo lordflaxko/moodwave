@@ -23,7 +23,7 @@ from app.core.security import (
 from app.deps import CurrentUser, DbSession, SettingsDep, get_optional_user
 from app.models import User
 from app.schemas import AppConfigOut, ExchangeRequest, SessionOut, UserOut
-from app.services.accounts import delete_user_data
+from app.services.accounts import delete_user_data, is_owner
 from app.services.guest import check_guest_start, merge_guest_into, purge_expired_guests
 from app.services.spotify.base import SpotifyError
 from app.services.spotify.oauth import authorize_url, exchange_code, store_tokens
@@ -32,8 +32,9 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def _user_out(user: User) -> UserOut:
+def _user_out(user: User, db: DbSession | None = None) -> UserOut:
     return UserOut(
+        is_owner=bool(db is not None and is_owner(db, user)),
         id=user.id,
         display_name=user.display_name,
         avatar_url=user.avatar_url,
@@ -89,7 +90,7 @@ def _guest_allowed(settings: Settings) -> bool:
 @router.get("/me", response_model=UserOut | None)
 def me(request: Request, db: DbSession, settings: SettingsDep) -> UserOut | None:
     user = get_optional_user(request, db, settings)
-    return _user_out(user) if user else None
+    return _user_out(user, db) if user else None
 
 
 @router.delete("/me", status_code=204)
@@ -205,7 +206,7 @@ def exchange(body: ExchangeRequest, db: DbSession) -> SessionOut:
     if guest is not None and guest.is_guest and guest.id != user.id:
         moved = merge_guest_into(db, guest, user)
         log.info("Moved %s guest playlists into a signed-in account", moved)
-    return SessionOut(token=sign_session(user.id), user=_user_out(user))
+    return SessionOut(token=sign_session(user.id), user=_user_out(user, db))
 
 
 def _new_demo_user(db: DbSession, settings: Settings) -> User:

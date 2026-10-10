@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     # Who can read the private error log (comma-separated Spotify user IDs). Unset: the first
     # Spotify account created here.
     owner_spotify_ids: str = ""
+    # For the owner dashboard's AI cost estimate: USD per million tokens. Set these from
+    # Anthropic's current pricing for ANTHROPIC_MODEL.
+    ai_price_input_per_mtok: float = 3.0
+    ai_price_output_per_mtok: float = 15.0
 
     # Used to sign the session cookie and derive the token-encryption key.
     session_secret: str = "dev-only-change-me-please-0123456789abcdef"

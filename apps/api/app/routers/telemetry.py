@@ -6,11 +6,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
-from sqlmodel import Session, col, select
+from sqlmodel import Session, select
 
-from app.core.config import get_settings
 from app.deps import CurrentUser, DbSession, SettingsDep, get_optional_user, rate_limiter
 from app.models import ClientError, User
+from app.services.accounts import is_owner
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/telemetry", tags=["telemetry"])
@@ -87,23 +87,6 @@ def report_error(body: ErrorReport, request: Request, db: DbSession, settings: S
         user_agent=request.headers.get("user-agent", ""),
         user_id=user.id if user else None,
     )
-
-
-def is_owner(db: Session, user: User) -> bool:
-    """The site owner: a Spotify account listed in OWNER_SPOTIFY_IDS, or, when that's unset,
-    the first Spotify account ever created here."""
-    if user.is_demo or user.is_guest or not user.spotify_id:
-        return False
-    owners = {s.strip() for s in get_settings().owner_spotify_ids.split(",") if s.strip()}
-    if owners:
-        return user.spotify_id in owners
-    first = db.exec(
-        select(User)
-        .where(col(User.spotify_id).is_not(None), User.is_demo == False, User.is_guest == False)  # noqa: E712
-        .order_by(col(User.created_at).asc())
-        .limit(1)
-    ).first()
-    return first is not None and first.id == user.id
 
 
 def _owner(user: CurrentUser, db: DbSession) -> User:

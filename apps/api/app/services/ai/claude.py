@@ -19,6 +19,35 @@ LISTENER_NOTES: ContextVar[tuple[str, ...]] = ContextVar("listener_notes", defau
 _FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
 
+def record_ai_usage(response: Any) -> None:
+    """Add this call's tokens to today's AIUsage row. Never lets bookkeeping break a request."""
+    try:
+        from datetime import UTC, datetime
+
+        from sqlmodel import Session
+
+        from app.db import engine
+        from app.models import AIUsage
+
+        usage = getattr(response, "usage", None)
+        if usage is None:
+            return
+        tokens_in = int(getattr(usage, "input_tokens", 0) or 0)
+        tokens_in += int(getattr(usage, "cache_read_input_tokens", 0) or 0)
+        tokens_in += int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
+        tokens_out = int(getattr(usage, "output_tokens", 0) or 0)
+        day = datetime.now(UTC).strftime("%Y-%m-%d")
+        with Session(engine) as db:
+            row = db.get(AIUsage, day) or AIUsage(day=day)
+            row.calls += 1
+            row.input_tokens += tokens_in
+            row.output_tokens += tokens_out
+            db.add(row)
+            db.commit()
+    except Exception:  # noqa: BLE001
+        log.debug("Could not record AI usage", exc_info=True)
+
+
 def _clamp(value: float, low: float = 0.0, high: float = 1.0) -> float:
     return max(low, min(high, float(value)))
 
@@ -76,6 +105,7 @@ class ClaudeProvider:
         except anthropic.APIConnectionError as exc:
             raise AIError("Could not reach the AI service.") from exc
 
+        record_ai_usage(response)
         if response.stop_reason == "refusal":
             raise AIError("The AI declined this request. Try rephrasing it.")
         if response.stop_reason == "max_tokens":

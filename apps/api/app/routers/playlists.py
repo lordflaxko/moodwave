@@ -35,6 +35,7 @@ from app.schemas import (
     Track,
     UpdatePlaylistRequest,
 )
+from app.services.accounts import is_owner
 from app.services.ai.base import AIError
 from app.services.ai.heuristic import HeuristicProvider
 from app.services.cover import CoverImageError, build_cover, process_upload
@@ -124,6 +125,7 @@ def _to_out(playlist: Playlist, notice: str | None = None) -> PlaylistOut:
         needs_sync=_needs_sync(playlist),
         cover=_cover_out(playlist, tracks),
         share_slug=playlist.share_slug,
+        featured=bool(playlist.featured_at and playlist.share_slug),
     )
 
 
@@ -524,11 +526,7 @@ def share_playlist(playlist_id: str, user: CurrentUser, db: DbSession) -> Playli
     """Turn on a public, read-only link (idempotent: the same link comes back)."""
     playlist = _get_owned(db, user, playlist_id)
     if not playlist.share_slug:
-        while True:
-            slug = secrets.token_urlsafe(7).replace("-", "x").replace("_", "y")
-            if db.exec(select(Playlist).where(Playlist.share_slug == slug)).first() is None:
-                break
-        playlist.share_slug = slug
+        playlist.share_slug = _new_share_slug(db)
         db.add(playlist)
         db.commit()
         db.refresh(playlist)
@@ -540,6 +538,41 @@ def unshare_playlist(playlist_id: str, user: CurrentUser, db: DbSession) -> Play
     """Turn the link off; it stops working everywhere (a new share makes a new link)."""
     playlist = _get_owned(db, user, playlist_id)
     playlist.share_slug = None
+    playlist.featured_at = None
+    db.add(playlist)
+    db.commit()
+    db.refresh(playlist)
+    return _to_out(playlist)
+
+
+def _new_share_slug(db: DbSession) -> str:
+    while True:
+        slug = secrets.token_urlsafe(7).replace("-", "x").replace("_", "y")
+        if db.exec(select(Playlist).where(Playlist.share_slug == slug)).first() is None:
+            return slug
+
+
+@router.post("/{playlist_id}/feature", response_model=PlaylistOut)
+def feature_playlist(playlist_id: str, user: CurrentUser, db: DbSession) -> PlaylistOut:
+    """Show this playlist in "Made with Moodwave" on Home (owner only; turns sharing on)."""
+    if not is_owner(db, user):
+        raise HTTPException(403, "Only the site owner can feature playlists.")
+    playlist = _get_owned(db, user, playlist_id)
+    if not playlist.share_slug:
+        playlist.share_slug = _new_share_slug(db)
+    playlist.featured_at = datetime.now(UTC)
+    db.add(playlist)
+    db.commit()
+    db.refresh(playlist)
+    return _to_out(playlist)
+
+
+@router.delete("/{playlist_id}/feature", response_model=PlaylistOut)
+def unfeature_playlist(playlist_id: str, user: CurrentUser, db: DbSession) -> PlaylistOut:
+    if not is_owner(db, user):
+        raise HTTPException(403, "Only the site owner can feature playlists.")
+    playlist = _get_owned(db, user, playlist_id)
+    playlist.featured_at = None
     db.add(playlist)
     db.commit()
     db.refresh(playlist)
