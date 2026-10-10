@@ -1,9 +1,9 @@
 import { addPropertyControls, ControlType, useIsStaticRenderer } from "framer"
 import { AnimatePresence, motion } from "framer-motion"
-import { useEffect, useState, type CSSProperties } from "react"
+import { useEffect, useState, type CSSProperties, useRef } from "react"
 import { createPortal } from "react-dom"
 
-import { C, EASE, MONO, SANS, SERIF, signIn, signOut, useSession, Safe } from "./MoodwaveAPI.tsx"
+import { C, EASE, MONO, SANS, SERIF, signIn, signOut, useSession, Safe, useDialogFocus } from "./MoodwaveAPI.tsx"
 
 /** Phone navigation: a burger that opens a full-screen sheet of large, staggered links. */
 
@@ -25,7 +25,9 @@ function MobileMenuInner(props: MobileMenuProps) {
     const session = useSession(!isStatic)
     const [open, setOpen] = useState(false)
     const [mounted, setMounted] = useState(false)
+    const sheet = useRef<HTMLDivElement>(null)
     useEffect(() => setMounted(true), [])
+    useDialogFocus(open, sheet)
 
     useEffect(() => {
         if (!open) return
@@ -71,6 +73,7 @@ function MobileMenuInner(props: MobileMenuProps) {
                     {open ? (
                         <motion.div
                             key="sheet"
+                            ref={sheet}
                             role="dialog"
                             aria-modal="true"
                             aria-label="Menu"

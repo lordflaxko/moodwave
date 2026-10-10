@@ -66,3 +66,18 @@ Framer can't vary preview metadata per query string, which is why the link lives
 
 `prefillComposer(prompt)` (MoodwaveAPI) fills a Composer on the same page via a `mw:prefill`
 window event, or opens `/create?prompt=…` when the page has no Composer.
+
+### Accessibility
+
+- **Focus rings:** `MoodwaveAPI` injects one stylesheet (`#mw-a11y`) with a 2px lilac
+  `:focus-visible` ring for every link, button, input and ARIA control on the site (including
+  Framer's own nav), overriding inline `outline: none`. Opt out with `data-focus-ring="off"`
+  on elements that draw their own focus state (the composer textarea).
+- **Reduced motion:** with `prefers-reduced-motion: reduce`, `MotionGlobalConfig.skipAnimations`
+  makes every Framer Motion animation jump to its end; frame-loop components (record, waveform,
+  mixer, cursor, preloader) check `useReducedMotion` themselves.
+- **Dialogs:** `useDialogFocus(open, ref)` moves focus in, traps Tab and returns focus to the
+  opener (mobile menu, cover editor).
+- **Contrast:** Subtle `#99938a` and Faint `#858079` pass 4.5:1 on the ink, surface and
+  surface-2 backgrounds (Framer colour styles and `C` tokens match).
+- Generation progress announces stage changes only (a hidden `role="status"`), not every tick.

@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence, motion, MotionGlobalConfig } from "framer-motion"
 import { Component, useEffect, useRef, useState, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 
@@ -18,8 +18,8 @@ export const C = {
     surface3: "#1f1c24",
     text: "#f2efe9",
     muted: "#b3ada4",
-    subtle: "#8a847c",
-    faint: "#5d5852",
+    subtle: "#99938a",
+    faint: "#858079",
     line: "rgba(242, 239, 233, 0.07)",
     line2: "rgba(242, 239, 233, 0.13)",
     lilac: "#c6b1f0",
@@ -1110,6 +1110,85 @@ function installErrorHandlers() {
     })
 }
 installErrorHandlers()
+
+// --- Accessibility: focus rings and reduced motion ------------------------------------------
+// One stylesheet for the whole site: a clear lilac ring on whatever the keyboard focuses
+// (mouse clicks don't show it). `!important` beats inline `outline: none` / `all: unset`.
+// Add data-focus-ring="off" to an element that draws its own focus state.
+
+let a11yInstalled = false
+function installA11y() {
+    if (a11yInstalled || typeof document === "undefined") return
+    a11yInstalled = true
+    const style = document.createElement("style")
+    style.id = "mw-a11y"
+    style.textContent = `
+:where(a, button, input, select, textarea, summary, [tabindex], [role="button"], [role="tab"], [role="radio"], [role="switch"], [role="menuitem"]):focus-visible:not([data-focus-ring="off"]) {
+  outline: 2px solid ${C.lilac} !important;
+  outline-offset: 3px !important;
+  border-radius: 6px;
+}
+:where(input[type="search"], input[type="text"], input:not([type]), textarea, select):focus-visible:not([data-focus-ring="off"]) {
+  outline-offset: 1px !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; }
+}`
+    document.head.appendChild(style)
+
+    // Reduced motion: let Framer Motion jump every animation (ours and the site's) to its end.
+    const query = window.matchMedia?.("(prefers-reduced-motion: reduce)")
+    const apply = () => {
+        MotionGlobalConfig.skipAnimations = Boolean(query?.matches)
+    }
+    apply()
+    query?.addEventListener?.("change", apply)
+}
+installA11y()
+
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
+/**
+ * Modal focus: while `open`, move focus into `ref` (its first control), keep Tab inside it,
+ * and give focus back to whatever had it (the opening button) when it closes.
+ */
+export function useDialogFocus(open: boolean, ref: { current: HTMLElement | null }) {
+    useEffect(() => {
+        if (!open || typeof document === "undefined") return
+        const opener = document.activeElement as HTMLElement | null
+        const focusFirst = () => {
+            const el = ref.current
+            if (!el) return
+            const first = el.querySelector<HTMLElement>(FOCUSABLE)
+            ;(first ?? el).focus({ preventScroll: true })
+        }
+        const timer = window.setTimeout(focusFirst, 30)
+        const onKey = (e: KeyboardEvent) => {
+            const el = ref.current
+            if (e.key !== "Tab" || !el) return
+            const items = [...el.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((n) => n.offsetParent !== null)
+            if (!items.length) return
+            const first = items[0]
+            const last = items[items.length - 1]
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault()
+                last.focus()
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault()
+                first.focus()
+            } else if (!el.contains(document.activeElement)) {
+                e.preventDefault()
+                first.focus()
+            }
+        }
+        document.addEventListener("keydown", onKey)
+        return () => {
+            window.clearTimeout(timer)
+            document.removeEventListener("keydown", onKey)
+            if (opener && document.contains(opener)) opener.focus({ preventScroll: true })
+        }
+    }, [open])
+}
 
 /** Error boundary for code components: report the crash, render nothing instead of a broken box. */
 export class Safe extends Component<{ name: string; children?: ReactNode }, { failed: boolean }> {

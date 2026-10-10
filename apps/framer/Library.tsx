@@ -407,6 +407,8 @@ function LibraryInner(props: LibraryProps) {
                                 <motion.a
                                     href={href}
                                     data-card={p.id}
+                                    tabIndex={-1}
+                                    aria-hidden
                                     initial="rest"
                                     animate={revealed === p.id ? "hover" : "rest"}
                                     whileHover={fine ? "hover" : undefined}

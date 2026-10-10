@@ -21,6 +21,7 @@ import {
     PlayerDock,
     playQueue,
     requestPlay,
+    useDialogFocus,
     useFeedback,
     usePlayer,
     useSession,
@@ -126,7 +127,7 @@ function EnergyCurve({ points, titles, accent }: { points: number[]; titles: str
 /** Three bars bouncing: shown on the track playing in the embed. */
 function Equalizer({ color }: { color: string }) {
     return (
-        <span aria-label="Playing" style={{ display: "inline-flex", alignItems: "flex-end", gap: 2, height: 12 }}>
+        <span aria-hidden style={{ display: "inline-flex", alignItems: "flex-end", gap: 2, height: 12 }}>
             {[0, 1, 2].map((i) => (
                 <motion.span key={i} animate={{ height: [3, 12, 5, 10, 3] }} transition={{ duration: 0.9, repeat: Infinity, delay: i * 0.15 }} style={{ width: 2, borderRadius: 2, background: color }} />
             ))}
@@ -265,9 +266,19 @@ function TrackRow({ t, i, narrow, accent, player, queue, isNew, verdict, editabl
                     ⠿
                 </span>
             ) : null}
-            <span style={{ fontFamily: MONO, fontSize: 12, color: active ? accent : C.faint, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+            <button
+                type="button"
+                disabled={!playable}
+                aria-label={`${active && player.playing ? "Pause" : "Play"} ${t.title} by ${t.artists.join(", ")}`}
+                onClick={(e) => {
+                    e.stopPropagation()
+                    requestPlay(spotifyId(t), label(t), queue)
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                style={{ all: "unset", cursor: playable ? "pointer" : "default", fontFamily: MONO, fontSize: 12, color: active ? accent : C.faint, textAlign: "right", fontVariantNumeric: "tabular-nums", justifySelf: "end" }}
+            >
                 {active && player.playing ? <Equalizer color={accent} /> : active ? <span style={{ color: accent }}>▶</span> : hovered && playable ? <span style={{ color: C.text }}>▶</span> : String(i + 1).padStart(2, "0")}
-            </span>
+            </button>
             {t.image_url ? (
                 <img src={t.image_url} alt="" loading="lazy" decoding="async" draggable={false} width={narrow ? 44 : 48} height={narrow ? 44 : 48} style={{ borderRadius: 8, objectFit: "cover", display: "block" }} />
             ) : (
@@ -349,6 +360,7 @@ function CoverEditor({ playlist, accent, onClose, onSaved }: { playlist: Playlis
     const [hint, setHint] = useState<string | null>(null)
     const fileRef = useRef<HTMLInputElement>(null)
     const panelRef = useRef<HTMLDivElement>(null)
+    useDialogFocus(true, panelRef)
 
     // One tile per distinct piece of artwork.
     const options: Track[] = []
@@ -365,7 +377,6 @@ function CoverEditor({ playlist, accent, onClose, onSaved }: { playlist: Playlis
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose()
         window.addEventListener("keydown", onKey)
-        panelRef.current?.focus()
         const overflow = document.body.style.overflow
         document.body.style.overflow = "hidden"
         return () => {

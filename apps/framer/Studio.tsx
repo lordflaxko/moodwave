@@ -181,13 +181,20 @@ function Overlay({ prompt, accent, length, live }: { prompt: string; accent: str
     const progress = live && streaming ? liveProgress(live, elapsed) : Math.min(0.95, 1 - Math.exp(-elapsed / (estimate * 0.6)))
     const stepText = live && streaming ? liveStep(live, length) : STEPS[step]
     const slowStart = Boolean(live && live.events === 0 && elapsed > 6)
+    // Screen readers hear stage changes only, not every counter tick or found song.
+    const announce =
+        live && streaming
+            ? { planning: live.title ? `Planning “${live.title}”` : "Reading the vibe", verifying: "Checking each song on Spotify", filling: "Finding a few more songs", finishing: "Almost done" }[live.stage]
+            : STEPS[step]
     const words = prompt.split(/\s+/)
     const beat = Math.max(0.7, 1.6 - step * 0.2)
 
     return createPortal(
         <motion.div
-            role="status"
-            aria-live="polite"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Composing ${length} songs`}
+            aria-busy="true"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -206,6 +213,9 @@ function Overlay({ prompt, accent, length, live }: { prompt: string; accent: str
             }}
         >
             <CoverOrbit covers={covers} reduced={reduced} />
+            <span role="status" aria-live="polite" style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap" }}>
+                {announce}
+            </span>
             <motion.div
                 aria-hidden
                 animate={reduced ? undefined : { scale: [1, 1.15, 1], opacity: [0.35, 0.6, 0.35] }}

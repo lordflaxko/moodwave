@@ -300,7 +300,7 @@ function ComposerInner(props: ComposerProps) {
         borderRadius: 100,
         border: "1px solid rgba(242, 239, 233, 0.13)",
         background: "transparent",
-        color: "#8a847c",
+        color: "#99938a",
         fontFamily: SANS,
         fontSize: 13,
         display: "flex",
@@ -351,11 +351,11 @@ function ComposerInner(props: ComposerProps) {
                 }}
             >
                 <div style={{ display: "flex", justifyContent: "space-between", padding: "16px 20px 0" }}>
-                    <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: "#8a847c", display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: "#99938a", display: "flex", alignItems: "center", gap: 8 }}>
                         <span style={{ width: 6, height: 6, borderRadius: 6, background: accent }} />
                         New playlist
                     </span>
-                    <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: "#5d5852" }}>
+                    <span style={{ fontFamily: MONO, fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: "#858079" }}>
                         {value.length > 0 ? `${value.length}/500` : "Enter ↵ to compose"}
                     </span>
                 </div>
@@ -367,6 +367,7 @@ function ComposerInner(props: ComposerProps) {
                     <textarea
                         id="mw-prompt"
                         ref={textareaRef}
+                        data-focus-ring="off"
                         value={value}
                         rows={2}
                         maxLength={500}
@@ -414,7 +415,7 @@ function ComposerInner(props: ComposerProps) {
                                 fontSize: 30,
                                 lineHeight: 1.3,
                                 letterSpacing: "-0.02em",
-                                color: "#5d5852",
+                                color: "#858079",
                                 display: "-webkit-box",
                                 WebkitLineClamp: 2,
                                 WebkitBoxOrient: "vertical",
@@ -427,7 +428,7 @@ function ComposerInner(props: ComposerProps) {
                                 "Describe a moment, a feeling, or a place — or paste a Spotify link…"
                             ) : (
                                 <>
-                                    <span style={{ fontStyle: "italic", color: "#8a847c" }}>{placeholderLead} </span>
+                                    <span style={{ fontStyle: "italic", color: "#99938a" }}>{placeholderLead} </span>
                                     {isStatic ? phrases[0] : typed}
                                     <span style={{ display: "inline-block", width: 1, height: "0.9em", marginLeft: 2, transform: "translateY(0.12em)", background: accent }} />
                                 </>
@@ -468,10 +469,10 @@ function ComposerInner(props: ComposerProps) {
                                 aria-checked={taste}
                                 onClick={toggleTaste}
                                 title="Lightly mix in the artists you listen to most on Spotify"
-                                style={{ ...pill, borderColor: taste ? mix(accent, "55%") : "rgba(242, 239, 233, 0.13)", color: taste ? "#f2efe9" : "#8a847c", background: taste ? mix(accent, "12%") : "transparent" }}
+                                style={{ ...pill, borderColor: taste ? mix(accent, "55%") : "rgba(242, 239, 233, 0.13)", color: taste ? "#f2efe9" : "#99938a", background: taste ? mix(accent, "12%") : "transparent" }}
                             >
                                 <span aria-hidden style={{ position: "relative", width: 24, height: 14, borderRadius: 14, background: taste ? accent : "rgba(242,239,233,0.14)", transition: "background 0.25s ease" }}>
-                                    <span style={{ position: "absolute", top: 2, left: taste ? 12 : 2, width: 10, height: 10, borderRadius: 10, background: taste ? "#0b0a0d" : "#8a847c", transition: "left 0.25s ease" }} />
+                                    <span style={{ position: "absolute", top: 2, left: taste ? 12 : 2, width: 10, height: 10, borderRadius: 10, background: taste ? "#0b0a0d" : "#99938a", transition: "left 0.25s ease" }} />
                                 </span>
                                 Blend my taste
                             </button>
@@ -494,7 +495,7 @@ function ComposerInner(props: ComposerProps) {
                                             fontSize: 12.5,
                                             cursor: "pointer",
                                             background: active ? "#f2efe9" : "transparent",
-                                            color: active ? "#0b0a0d" : "#8a847c",
+                                            color: active ? "#0b0a0d" : "#99938a",
                                             transition: "background 0.3s ease, color 0.3s ease",
                                         }}
                                     >
@@ -521,13 +522,13 @@ function ComposerInner(props: ComposerProps) {
                             fontSize: 14,
                             cursor: ready ? "pointer" : "default",
                             background: ready ? accent : "rgba(242,239,233,0.06)",
-                            color: ready ? "#0b0a0d" : "#5d5852",
+                            color: ready ? "#0b0a0d" : "#858079",
                             boxShadow: ready ? `0 12px 40px -10px ${accent}` : "none",
                             transition: "background 0.5s ease, color 0.5s ease, box-shadow 0.5s ease",
                         }}
                     >
                         Compose
-                        <span style={{ width: 32, height: 32, borderRadius: 32, display: "grid", placeItems: "center", background: ready ? "#0b0a0d" : "rgba(242,239,233,0.05)", color: ready ? accent : "#5d5852" }}>
+                        <span style={{ width: 32, height: 32, borderRadius: 32, display: "grid", placeItems: "center", background: ready ? "#0b0a0d" : "rgba(242,239,233,0.05)", color: ready ? accent : "#858079" }}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                                 <path d="M12 19V5M5 12l7-7 7 7" />
                             </svg>
