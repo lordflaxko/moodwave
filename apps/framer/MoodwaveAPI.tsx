@@ -314,6 +314,24 @@ export function clearAuthError() {
     }
 }
 
+/**
+ * Delete this account and everything stored for it (asks first). Spotify access can also be
+ * removed at spotify.com/account/apps. Returns true when deleted.
+ */
+export async function deleteAccount(): Promise<boolean> {
+    const guest = Boolean(session.user?.is_guest)
+    const ok = window.confirm(
+        guest
+            ? "Delete this guest session and every playlist made in it? This can’t be undone."
+            : "Delete your Moodwave account and everything in it — playlists, covers, share links and thumbs? Playlists already saved to Spotify stay in Spotify. This can’t be undone."
+    )
+    if (!ok) return false
+    await api<void>("/auth/me", { method: "DELETE" })
+    signOut()
+    window.location.href = "/"
+    return true
+}
+
 export function signOut() {
     setToken(null)
     updateSession({ user: null })

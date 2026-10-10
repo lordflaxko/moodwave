@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { useEffect, useState, type CSSProperties, useRef } from "react"
 import { createPortal } from "react-dom"
 
-import { C, EASE, MONO, SANS, SERIF, signIn, signOut, useSession, Safe, useDialogFocus } from "./MoodwaveAPI.tsx"
+import { C, EASE, MONO, SANS, SERIF, signIn, signOut, useSession, Safe, useDialogFocus, deleteAccount } from "./MoodwaveAPI.tsx"
 
 /** Phone navigation: a burger that opens a full-screen sheet of large, staggered links. */
 
@@ -122,11 +122,16 @@ function MobileMenuInner(props: MobileMenuProps) {
                                     <>
                                         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                             <span style={{ width: 8, height: 8, borderRadius: 8, background: session.user.is_demo ? C.amber : "#1ed760" }} />
-                                            {session.user.is_demo ? "Demo mode" : session.user.display_name}
+                                            {session.user.is_demo ? "Demo mode" : session.user.is_guest ? "Guest" : session.user.display_name}
                                         </span>
-                                        <button type="button" onClick={() => signOut()} style={{ background: "none", border: "none", color: C.muted, fontSize: 14, cursor: "pointer" }}>
-                                            Sign out
-                                        </button>
+                                        <span style={{ display: "flex", gap: 16 }}>
+                                            <button type="button" onClick={() => void deleteAccount().catch((e: Error) => window.alert(e.message))} style={{ background: "none", border: "none", color: C.amber, fontSize: 13, cursor: "pointer" }}>
+                                                Delete data
+                                            </button>
+                                            <button type="button" onClick={() => signOut()} style={{ background: "none", border: "none", color: C.muted, fontSize: 14, cursor: "pointer" }}>
+                                                {session.user.is_guest ? "Leave guest mode" : "Sign out"}
+                                            </button>
+                                        </span>
                                     </>
                                 ) : session.config?.spotify_enabled ? (
                                     <button type="button" onClick={() => signIn()} style={{ width: "100%", height: 50, borderRadius: 100, border: "none", background: C.text, color: C.ink, fontSize: 15, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>

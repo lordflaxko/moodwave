@@ -92,3 +92,11 @@ Spotify. Signing in with Spotify later moves guest playlists into the account (t
 token is sent with `/auth/exchange`). Sign-in errors, e.g. not allow-listed, show as a
 notice under the nav (AccountChip) with a "Try as a guest" button. Settings:
 `ALLOW_GUEST`, `GUEST_PLAYLISTS_PER_DAY`, `GUEST_AI_PER_DAY`, `GUEST_MAX_TRACKS`.
+
+### FAQ, Privacy and Terms
+
+`/faq`, `/privacy` and `/terms` are native Framer pages (site text styles, editable on the
+canvas), linked from the footer. `content/legal_pages.js` is the script that first built them
+(it holds the original wording). Questions go to the repo's GitHub Issues. Data deletion is
+self-serve: **Delete my account and data** in the account menu (`DELETE /auth/me`).
+Keep the Privacy page in step with the code if what's stored or shared changes.

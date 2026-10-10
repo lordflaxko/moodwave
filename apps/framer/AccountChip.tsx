@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { useEffect, useRef, useState, type CSSProperties } from "react"
 import { createPortal } from "react-dom"
 
-import { C, EASE, SANS, signIn, signOut, useSession, Safe, startGuest, clearAuthError } from "./MoodwaveAPI.tsx"
+import { C, EASE, SANS, signIn, signOut, useSession, Safe, startGuest, clearAuthError, deleteAccount } from "./MoodwaveAPI.tsx"
 
 /** Nav status pill: "Connect Spotify" when signed out, the account (with sign-out) when in. */
 
@@ -171,6 +171,17 @@ function AccountChipInner(props: AccountChipProps) {
                             style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 10px", borderRadius: 10, border: "none", background: "transparent", color: C.muted, fontSize: 14, cursor: "pointer" }}
                         >
                             {guest ? "Leave guest mode" : "Sign out"}
+                        </button>
+                        <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                                setOpen(false)
+                                void deleteAccount().catch((e: Error) => window.alert(e.message))
+                            }}
+                            style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 10px", borderRadius: 10, border: "none", background: "transparent", color: C.amber, fontSize: 13, cursor: "pointer" }}
+                        >
+                            Delete my account and data
                         </button>
                     </motion.div>
                 ) : null}
