@@ -1,5 +1,5 @@
 import { addPropertyControls, ControlType, useIsStaticRenderer } from "framer"
-import { AnimatePresence, motion, useMotionValueEvent, useReducedMotion, useScroll, useTransform } from "framer-motion"
+import { motion, useMotionValueEvent, useReducedMotion, useScroll, useTransform } from "framer-motion"
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
 
 import { C, EASE, FALLBACK_COVERS, MONO, SANS, SERIF } from "./MoodwaveAPI.tsx"
@@ -33,7 +33,10 @@ function useWidth() {
     useEffect(() => {
         const el = ref.current
         if (!el || typeof ResizeObserver === "undefined") return
-        const ro = new ResizeObserver(([entry]) => setWidth(Math.round(entry.contentRect.width)))
+        const ro = new ResizeObserver(([entry]) => {
+            // Hidden tabs and collapsed panes report 0; keep the last real width.
+            if (entry.contentRect.width > 0) setWidth(Math.round(entry.contentRect.width))
+        })
         ro.observe(el)
         return () => ro.disconnect()
     }, [])
@@ -197,15 +200,30 @@ function Playlist({ accent }: { accent: string }) {
 }
 
 function Visual({ step, accent }: { step: number; accent: string }) {
-    const views: ReactNode[] = [<Typing active />, <Vibe accent={accent} />, <Verify />, <Playlist accent={accent} />]
+    const views = (active: number): ReactNode[] => [
+        <Typing active={active === 0} />,
+        <Vibe accent={accent} />,
+        <Verify />,
+        <Playlist accent={accent} />,
+    ]
+    const all = views(step)
     return (
         <div style={card}>
             <div aria-hidden style={{ position: "absolute", inset: -120, background: `radial-gradient(closest-side at 80% 0%, color-mix(in srgb, ${accent} 14%, transparent), transparent)`, pointerEvents: "none" }} />
-            <AnimatePresence mode="wait">
-                <motion.div key={step} initial={{ opacity: 0, y: 18, filter: "blur(6px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} exit={{ opacity: 0, y: -12, filter: "blur(6px)" }} transition={{ duration: 0.45, ease: EASE }} style={{ position: "relative", minHeight: 260 }}>
-                    {views[step]}
-                </motion.div>
-            </AnimatePresence>
+            <div style={{ position: "relative", display: "grid", minHeight: 260 }}>
+                {all.map((view, i) => (
+                    <motion.div
+                        key={i}
+                        aria-hidden={i !== step}
+                        initial={false}
+                        animate={{ opacity: i === step ? 1 : 0, y: i === step ? 0 : i < step ? -10 : 10 }}
+                        transition={{ duration: 0.4, ease: EASE }}
+                        style={{ gridArea: "1 / 1", pointerEvents: i === step ? "auto" : "none" }}
+                    >
+                        <div key={i === step ? `on-${i}` : `off-${i}`}>{view}</div>
+                    </motion.div>
+                ))}
+            </div>
         </div>
     )
 }
@@ -244,13 +262,20 @@ export default function FlowStory(props: FlowStoryProps) {
         return () => ro.disconnect()
     }, [pinned])
 
-    // Scroll distance = one viewport per step; the stage is held centred while it plays.
-    const travel = viewport * 0.9 * STEPS.length
-    const { scrollYProgress } = useScroll({ target: track, offset: ["start start", "end end"] })
-    const pin = Math.max(0, (viewport - stageHeight) / 2)
-    const y = useTransform(scrollYProgress, [0, 1], [pin, travel + pin])
+    // One step ≈ 85vh of scrolling. The browser pins the stage (position: sticky), so it
+    // moves exactly with the page; JS only decides which step is showing.
+    const travel = viewport * 0.85 * STEPS.length
+    const top = Math.max(96, Math.round((viewport - stageHeight) / 2))
+    const { scrollYProgress } = useScroll({ target: track, offset: [`start ${top}px`, `end ${top + stageHeight}px`] })
     const rail = useTransform(scrollYProgress, [0, 1], ["0%", "100%"])
-    useMotionValueEvent(scrollYProgress, "change", (v) => setStep(Math.min(STEPS.length - 1, Math.floor(v * STEPS.length * 0.999))))
+    useMotionValueEvent(scrollYProgress, "change", (v) => {
+        const raw = v * STEPS.length
+        setStep((prev) => {
+            // Small dead zone at each boundary so the step doesn't flicker back and forth.
+            if (raw >= prev + 1 + 0.06 || raw < prev - 0.06) return Math.max(0, Math.min(STEPS.length - 1, Math.floor(raw)))
+            return prev
+        })
+    })
 
     const header = (
         <div style={{ marginBottom: pinned ? 36 : 28 }}>
@@ -283,8 +308,8 @@ export default function FlowStory(props: FlowStoryProps) {
 
     return (
         <div ref={ref} style={{ position: "relative", width: "100%", ...props.style, height: "auto" }}>
-            <div ref={track} style={{ position: "relative", height: travel + stageHeight + pin * 2 }}>
-                <motion.div ref={stage} style={{ position: "absolute", left: 0, right: 0, top: 0, y, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 64, alignItems: "center" }}>
+            <div ref={track} style={{ position: "relative", height: travel + stageHeight }}>
+                <div ref={stage} style={{ position: "sticky", top, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 64, alignItems: "center" }}>
                     <div>
                         {header}
                         <div style={{ display: "flex", gap: 24 }}>
@@ -292,7 +317,7 @@ export default function FlowStory(props: FlowStoryProps) {
                             <div aria-hidden style={{ position: "relative", width: 2, borderRadius: 2, background: C.line2 }}>
                                 <motion.div style={{ position: "absolute", left: 0, right: 0, top: 0, height: rail, borderRadius: 2, background: accent }} />
                             </div>
-                            <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 18, flex: 1 }}>
+                            <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 14, flex: 1 }}>
                                 {STEPS.map((s, i) => {
                                     const active = i === step
                                     return (
@@ -301,27 +326,28 @@ export default function FlowStory(props: FlowStoryProps) {
                                                 <span style={{ fontFamily: MONO, fontSize: 11, color: active ? accent : C.faint }}>{String(i + 1).padStart(2, "0")}</span>
                                                 <span style={{ fontFamily: SERIF, fontWeight: 300, fontSize: 26, letterSpacing: "-0.015em", color: C.text }}>{s.title}</span>
                                             </motion.div>
-                                            <AnimatePresence initial={false}>
-                                                {active ? (
-                                                    <motion.p
-                                                        initial={{ opacity: 0, height: 0 }}
-                                                        animate={{ opacity: 1, height: "auto" }}
-                                                        exit={{ opacity: 0, height: 0 }}
-                                                        transition={{ duration: 0.45, ease: EASE }}
-                                                        style={{ margin: "8px 0 0 31px", fontFamily: SANS, fontSize: 15, lineHeight: 1.6, color: C.subtle, overflow: "hidden", maxWidth: 420 }}
-                                                    >
-                                                        {s.body}
-                                                    </motion.p>
-                                                ) : null}
-                                            </AnimatePresence>
                                         </li>
                                     )
                                 })}
                             </ol>
                         </div>
+                        <div style={{ position: "relative", display: "grid", minHeight: 76, marginTop: 22, marginLeft: 26, maxWidth: 440 }}>
+                            {STEPS.map((s, i) => (
+                                <motion.p
+                                    key={s.title}
+                                    aria-hidden={i !== step}
+                                    initial={false}
+                                    animate={{ opacity: i === step ? 1 : 0, y: i === step ? 0 : 6 }}
+                                    transition={{ duration: 0.35, ease: EASE }}
+                                    style={{ gridArea: "1 / 1", margin: 0, fontFamily: SANS, fontSize: 15, lineHeight: 1.6, color: C.subtle }}
+                                >
+                                    {s.body}
+                                </motion.p>
+                            ))}
+                        </div>
                     </div>
                     <Visual step={step} accent={accent} />
-                </motion.div>
+                </div>
             </div>
         </div>
     )

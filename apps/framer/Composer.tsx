@@ -210,8 +210,15 @@ export default function Composer(props: ComposerProps) {
 
     // On the studio page, show the prompt you arrived with (after mount, so hydration matches).
     useEffect(() => {
-        const prompt = new URLSearchParams(window.location.search).get("prompt")
+        const params = new URLSearchParams(window.location.search)
+        const prompt = params.get("prompt")
         if (prompt) setValue(prompt.slice(0, 500))
+        // Arriving from the energy mixer: preset the nearest energy level.
+        const level = Number(params.get("energy"))
+        if (params.get("energy") !== null && Number.isFinite(level)) {
+            const nearest = ENERGY.filter((e) => e.value !== null).reduce((best, e) => (Math.abs((e.value ?? 0) - level) < Math.abs((best.value ?? 0) - level) ? e : best))
+            setEnergy(nearest.key)
+        }
     }, [])
 
     useEffect(() => {

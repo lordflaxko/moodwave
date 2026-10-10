@@ -19,10 +19,19 @@ paste it into the matching code file in the Framer project (or the other way rou
 | `Preloader.tsx` | Home | Vinyl + equaliser intro, once per session |
 | `Spotlight.tsx` | Home hero | Light that follows the pointer over the portrait wall |
 | `FlowStory.tsx` | Home | Scroll-pinned "How it flows" story (stacked on phones) |
-| `Overrides.tsx` | Mood cards, showcase card, CTAs | `withTilt`, `withTiltGlare`, `withMagnetic` |
+| `EnergyMixer.tsx` | Home | Fader from Calm to Peak: visualiser, BPM, matching records, optional sound |
+| `SpinRecord.tsx` | Home | Draggable record; lands on a mood and offers to compose it |
+| `RecordSleeve.tsx` | Artist cards | Record that slides out of the card on hover (reads `--sleeve`) |
+| `Waveform.tsx` | Home, layout template | Oscilloscope line reacting to the pointer and scroll speed |
+| `MiniEq.tsx` | Showcase track rows | Bars that play on row hover (reads `--eq`) |
+| `Overrides.tsx` | Cards, CTAs, nav, rows | `withTilt`, `withTiltGlare`, `withMagnetic`, `withSleeve`, `withTrackHover`, `withNavCondense` |
 
 Every motion piece checks `prefers-reduced-motion`, and pointer-only effects check
-`(pointer: fine)`.
+`(pointer: fine)`. Sound (`useSound` in `MoodwaveAPI.tsx`) is off until someone turns it on.
+
+Overrides must keep the exact shape `export function withX(Component: ComponentType<any>): ComponentType`
+returning `forwardRef(...)` directly — otherwise Framer doesn't recognise them as overrides — and
+must forward `ref`, which appear/in-view effects need.
 
 ## Pointing the site at the API
 

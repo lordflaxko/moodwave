@@ -337,29 +337,49 @@ export const FALLBACK_COVERS = [
     "https://is1-ssl.mzstatic.com/image/thumb/Music113/v4/12/9c/4d/129c4dd1-3ba4-05bd-487d-c4eb1e0eec89/27485.jpg/600x600bb.jpg",
 ]
 
-let coverCache: string[] | null = null
+export interface FeaturedTrack {
+    title: string
+    artists: string[]
+    image_url: string | null
+    energy: number | null
+}
 
-/** Album covers from the public showcase endpoint (cached per page), falling back to a fixed set. */
-export function useFeaturedCovers(count = 12): string[] {
-    const [covers, setCovers] = useState<string[]>(coverCache ?? FALLBACK_COVERS)
+let featuredCache: FeaturedTrack[] | null = null
+let featuredRequest: Promise<FeaturedTrack[]> | null = null
+
+function loadFeatured(): Promise<FeaturedTrack[]> {
+    if (featuredCache) return Promise.resolve(featuredCache)
+    featuredRequest ??= fetch(`${API_URL}/catalog/featured`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data: { tracks?: FeaturedTrack[] } | null) => {
+            const tracks = (data?.tracks ?? []).filter((t) => Boolean(t.image_url))
+            if (tracks.length >= 6) featuredCache = tracks
+            return tracks
+        })
+        .catch(() => [])
+    return featuredRequest
+}
+
+/** Real tracks (with artwork and energy) from the public showcase endpoint, cached per page. */
+export function useFeaturedTracks(): FeaturedTrack[] {
+    const [tracks, setTracks] = useState<FeaturedTrack[]>(featuredCache ?? [])
     useEffect(() => {
-        if (coverCache) return
         let alive = true
-        fetch(`${API_URL}/catalog/featured`)
-            .then((r) => (r.ok ? r.json() : null))
-            .then((data: { tracks?: { image_url?: string | null }[] } | null) => {
-                const urls = Array.from(new Set((data?.tracks ?? []).map((t) => t.image_url).filter((u): u is string => Boolean(u))))
-                if (urls.length >= 6) {
-                    coverCache = urls
-                    if (alive) setCovers(urls)
-                }
-            })
-            .catch(() => undefined)
+        loadFeatured().then((t) => {
+            if (alive && t.length) setTracks(t)
+        })
         return () => {
             alive = false
         }
     }, [])
-    return covers.slice(0, count)
+    return tracks
+}
+
+/** Album covers from the showcase endpoint, falling back to a fixed set. */
+export function useFeaturedCovers(count = 12): string[] {
+    const tracks = useFeaturedTracks()
+    const urls = Array.from(new Set(tracks.map((t) => t.image_url).filter((u): u is string => Boolean(u))))
+    return (urls.length >= 6 ? urls : FALLBACK_COVERS).slice(0, count)
 }
 
 /** True on devices with a precise pointer (mouse/trackpad): hover-only effects are off elsewhere. */
@@ -374,4 +394,186 @@ export function useFinePointer(): boolean {
         return () => mq.removeEventListener("change", update)
     }, [])
     return fine
+}
+
+// --- Sound (opt-in) ---------------------------------------------------------------------
+// Off by default. The audio graph is only created after a click on a sound toggle, which
+// is also what browsers require before any audio can play.
+
+let audioCtx: AudioContext | null = null
+let master: GainNode | null = null
+let analyser: AnalyserNode | null = null
+let noise: AudioBuffer | null = null
+let soundOn = false
+const soundListeners = new Set<(on: boolean) => void>()
+
+function ensureAudio() {
+    if (audioCtx || typeof window === "undefined") return
+    const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    if (!Ctor) return
+    audioCtx = new Ctor()
+    master = audioCtx.createGain()
+    master.gain.value = 0.12
+    analyser = audioCtx.createAnalyser()
+    analyser.fftSize = 128
+    master.connect(analyser)
+    analyser.connect(audioCtx.destination)
+    noise = audioCtx.createBuffer(1, audioCtx.sampleRate, audioCtx.sampleRate)
+    const data = noise.getChannelData(0)
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1
+}
+
+export function setSound(on: boolean) {
+    soundOn = on
+    if (on) {
+        ensureAudio()
+        void audioCtx?.resume()
+    } else {
+        stopPad()
+        void audioCtx?.suspend()
+    }
+    soundListeners.forEach((fn) => fn(on))
+}
+
+export function useSound() {
+    const [enabled, setEnabled] = useState(soundOn)
+    useEffect(() => {
+        soundListeners.add(setEnabled)
+        return () => {
+            soundListeners.delete(setEnabled)
+        }
+    }, [])
+    return { enabled, toggle: () => setSound(!soundOn) }
+}
+
+/** Fills `into` with live frequency data while sound is on; returns false otherwise. */
+export function readSpectrum(into: Uint8Array<ArrayBuffer>): boolean {
+    if (!soundOn || !analyser) return false
+    analyser.getByteFrequencyData(into)
+    return true
+}
+
+interface Pad {
+    oscs: OscillatorNode[]
+    filter: BiquadFilterNode
+    gain: GainNode
+    pulse: number
+    bpm: number
+}
+let pad: Pad | null = null
+
+const CHORDS = [
+    [110, 130.81, 164.81], // A minor, low: calm
+    [130.81, 164.81, 196.0], // C major
+    [146.83, 185.0, 220.0], // D major
+    [164.81, 207.65, 246.94], // E major, bright: peak
+]
+
+function kick(time: number, strength: number) {
+    if (!audioCtx || !master) return
+    const osc = audioCtx.createOscillator()
+    const g = audioCtx.createGain()
+    osc.frequency.setValueAtTime(120, time)
+    osc.frequency.exponentialRampToValueAtTime(42, time + 0.18)
+    g.gain.setValueAtTime(0.55 * strength, time)
+    g.gain.exponentialRampToValueAtTime(0.001, time + 0.22)
+    osc.connect(g)
+    g.connect(master)
+    osc.start(time)
+    osc.stop(time + 0.25)
+}
+
+/** A soft pad, with a pulse at the matching tempo, that follows an energy value 0–1. */
+export function playPad(energy: number) {
+    if (!soundOn) return
+    ensureAudio()
+    const ctx = audioCtx
+    if (!ctx || !master) return
+    const e = Math.max(0, Math.min(1, energy))
+    const chord = CHORDS[Math.min(CHORDS.length - 1, Math.floor(e * CHORDS.length))]
+    const now = ctx.currentTime
+    const bpm = Math.round(60 + e * 110)
+    if (!pad) {
+        const filter = ctx.createBiquadFilter()
+        filter.type = "lowpass"
+        const gain = ctx.createGain()
+        gain.gain.setValueAtTime(0, now)
+        gain.gain.linearRampToValueAtTime(0.5, now + 0.6)
+        filter.connect(gain)
+        gain.connect(master)
+        const oscs = chord.flatMap((f) =>
+            [-6, 6].map((detune) => {
+                const o = ctx.createOscillator()
+                o.type = "sawtooth"
+                o.frequency.value = f
+                o.detune.value = detune
+                o.connect(filter)
+                o.start()
+                return o
+            }),
+        )
+        pad = { oscs, filter, gain, pulse: 0, bpm: 0 }
+    }
+    const current = pad
+    chord.forEach((f, i) => {
+        current.oscs[i * 2]?.frequency.setTargetAtTime(f, now, 0.15)
+        current.oscs[i * 2 + 1]?.frequency.setTargetAtTime(f, now, 0.15)
+    })
+    current.filter.frequency.setTargetAtTime(380 + e * 2600, now, 0.2)
+    if (current.bpm !== bpm) {
+        window.clearInterval(current.pulse)
+        current.bpm = bpm
+        current.pulse = window.setInterval(() => kick(ctx.currentTime + 0.02, 0.4 + e * 0.6), (60 / bpm) * 1000)
+    }
+}
+
+export function stopPad() {
+    if (!pad || !audioCtx) return
+    const p = pad
+    pad = null
+    window.clearInterval(p.pulse)
+    p.gain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.15)
+    window.setTimeout(() => p.oscs.forEach((o) => o.stop()), 800)
+}
+
+/** A short vinyl scratch whose pitch follows how fast the record is moving. */
+export function scratch(velocity: number) {
+    if (!soundOn || !audioCtx || !master || !noise) return
+    const v = Math.min(1, Math.abs(velocity))
+    if (v < 0.02) return
+    const now = audioCtx.currentTime
+    const src = audioCtx.createBufferSource()
+    src.buffer = noise
+    const band = audioCtx.createBiquadFilter()
+    band.type = "bandpass"
+    band.Q.value = 6
+    band.frequency.value = 300 + v * 2400
+    const g = audioCtx.createGain()
+    g.gain.setValueAtTime(0.0001, now)
+    g.gain.exponentialRampToValueAtTime(0.25 * v + 0.02, now + 0.01)
+    g.gain.exponentialRampToValueAtTime(0.0001, now + 0.07)
+    src.connect(band)
+    band.connect(g)
+    g.connect(master)
+    src.start(now, Math.random() * 0.8, 0.08)
+}
+
+/** The small "♪ Sound" pill shared by the mixer and the record. */
+export function SoundToggle({ accent = C.lilac }: { accent?: string }) {
+    const { enabled, toggle } = useSound()
+    return (
+        <button
+            type="button"
+            onClick={toggle}
+            aria-pressed={enabled}
+            style={{ height: 34, borderRadius: 100, padding: "0 14px", display: "inline-flex", alignItems: "center", gap: 8, border: `1px solid ${enabled ? accent : C.line2}`, background: enabled ? `color-mix(in srgb, ${accent} 14%, transparent)` : "transparent", color: enabled ? C.text : C.subtle, fontFamily: SANS, fontSize: 12.5, cursor: "pointer" }}
+        >
+            <span aria-hidden style={{ display: "inline-flex", alignItems: "flex-end", gap: 2, height: 10 }}>
+                {[6, 10, 4].map((h, i) => (
+                    <span key={i} style={{ width: 2, height: enabled ? h : 3, borderRadius: 2, background: enabled ? accent : C.subtle, transition: "height 0.3s ease" }} />
+                ))}
+            </span>
+            Sound {enabled ? "on" : "off"}
+        </button>
+    )
 }

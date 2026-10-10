@@ -45,7 +45,10 @@ function useWidth() {
     useEffect(() => {
         const el = ref.current
         if (!el || typeof ResizeObserver === "undefined") return
-        const ro = new ResizeObserver(([entry]) => setWidth(Math.round(entry.contentRect.width)))
+        const ro = new ResizeObserver(([entry]) => {
+            // Hidden tabs and collapsed panes report 0; keep the last real width.
+            if (entry.contentRect.width > 0) setWidth(Math.round(entry.contentRect.width))
+        })
         ro.observe(el)
         return () => ro.disconnect()
     }, [])
