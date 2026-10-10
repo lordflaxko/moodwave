@@ -429,9 +429,8 @@ function LibraryInner(props: LibraryProps) {
                                         {p.title}
                                     </a>
                                 )}
-                                <div style={{ fontFamily: SERIF, fontStyle: "italic", fontWeight: 300, fontSize: 14, color: C.subtle, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                    {hit ? <span style={{ fontStyle: "normal", fontFamily: SANS, fontSize: 13, color: accent }}>Features {hit}</span> : `“${p.prompt}”`}
-                                </div>
+                                {/* The prompt shows on the cover (hover); an artist search says why the card matched. */}
+                                {hit ? <div style={{ fontFamily: SANS, fontSize: 13, color: accent, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Features {hit}</div> : null}
                                 <div style={{ ...eyebrow, fontSize: 10, color: C.faint, marginTop: 10 }}>
                                     {p.track_count} songs · {duration(p.total_duration_ms, true)} · {relativeTime(p.created_at)}
                                 </div>
