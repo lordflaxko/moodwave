@@ -996,7 +996,7 @@ function PlaylistViewInner(props: PlaylistViewProps) {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.9, ease: EASE }}
-                style={{ display: "flex", flexDirection: narrow ? "column" : "row", gap: narrow ? 28 : 48, alignItems: narrow ? "stretch" : "flex-end" }}
+                style={{ position: "relative", zIndex: 5, display: "flex", flexDirection: narrow ? "column" : "row", gap: narrow ? 28 : 48, alignItems: narrow ? "stretch" : "flex-end" }}
             >
                 <div style={{ width: narrow ? "100%" : 320, boxShadow: "0 40px 90px -30px rgba(0,0,0,0.9)", borderRadius: 24 }}>
                     <div style={{ position: "relative" }} className="mw-cover">
