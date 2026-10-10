@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react"
 import { createPortal } from "react-dom"
 
-import { api, C, Collage, duration, EASE, MONO, relativeTime, SANS, SERIF, signIn, useSession, type Playlist, type PlaylistSummary, Safe } from "./MoodwaveAPI.tsx"
+import { api, C, Collage, duration, EASE, MONO, relativeTime, SANS, SERIF, signIn, useFinePointer, useSession, type Playlist, type PlaylistSummary, Safe } from "./MoodwaveAPI.tsx"
 
 /**
  * Moodwave library (`/library`): every playlist you've made. Search (titles, prompts,
@@ -154,6 +154,19 @@ function LibraryInner(props: LibraryProps) {
     const [draft, setDraft] = useState("")
     const [busy, setBusy] = useState<string | null>(null)
     const [flash, setFlash] = useState<string | null>(null)
+    // Touch screens have no hover: the first tap shows a card's prompt, the second opens it.
+    const fine = useFinePointer()
+    const [revealed, setRevealed] = useState<string | null>(null)
+
+    useEffect(() => {
+        if (!revealed) return
+        const away = (e: PointerEvent) => {
+            const card = (e.target as Element | null)?.closest?.("[data-card]")
+            if (card?.getAttribute("data-card") !== revealed) setRevealed(null)
+        }
+        window.addEventListener("pointerdown", away)
+        return () => window.removeEventListener("pointerdown", away)
+    }, [revealed])
 
     const load = () =>
         api<Summary[]>("/playlists")
@@ -391,17 +404,28 @@ function LibraryInner(props: LibraryProps) {
                                     onDuplicate={() => void duplicate(p)}
                                     onDelete={() => void remove(p)}
                                 />
-                                <motion.a href={href} whileHover="hover" style={{ display: "block", textDecoration: "none", color: "inherit" }}>
-                                    <motion.div variants={{ hover: { y: -6 } }} transition={{ duration: 0.5, ease: EASE }} style={{ position: "relative", borderRadius: 22, boxShadow: "0 30px 70px -36px rgba(0,0,0,0.95)" }}>
+                                <motion.a
+                                    href={href}
+                                    data-card={p.id}
+                                    initial="rest"
+                                    animate={revealed === p.id ? "hover" : "rest"}
+                                    whileHover={fine ? "hover" : undefined}
+                                    onClick={(e) => {
+                                        if (fine || revealed === p.id) return
+                                        e.preventDefault()
+                                        setRevealed(p.id)
+                                    }}
+                                    style={{ display: "block", textDecoration: "none", color: "inherit" }}
+                                >
+                                    <motion.div variants={{ rest: { y: 0 }, hover: { y: -6 } }} transition={{ duration: 0.5, ease: EASE }} style={{ position: "relative", borderRadius: 22, boxShadow: "0 30px 70px -36px rgba(0,0,0,0.95)" }}>
                                         <Collage images={p.cover_images} size="100%" radius={22} />
                                         <motion.div
-                                            variants={{ hover: { opacity: 1 } }}
-                                            initial={{ opacity: 0 }}
+                                            variants={{ rest: { opacity: 0 }, hover: { opacity: 1 } }}
                                             transition={{ duration: 0.35 }}
                                             style={{ position: "absolute", inset: 0, borderRadius: 22, background: "linear-gradient(180deg, rgba(11,10,13,0.1) 0%, rgba(11,10,13,0.88) 100%)", display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: 18, gap: 10 }}
                                         >
                                             <span style={{ fontFamily: SERIF, fontStyle: "italic", fontWeight: 300, fontSize: 16, lineHeight: 1.35, color: C.text, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>“{p.prompt}”</span>
-                                            <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: accent }}>Open →</span>
+                                            <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: accent }}>{fine ? "Open →" : "Tap again to open →"}</span>
                                         </motion.div>
                                         {p.saved_to_spotify ? (
                                             <span style={{ position: "absolute", top: 12, left: 12, display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", borderRadius: 100, background: "rgba(11,10,13,0.75)", backdropFilter: "blur(8px)", fontSize: 11.5, color: C.text }}>
