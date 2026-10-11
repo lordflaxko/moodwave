@@ -1,47 +1,43 @@
 # Moodwave site
 
-The public front end: Vite + React 19 + TypeScript + Framer Motion + React Router, hosted on Vercel.
-It replaces the Framer-hosted site with the same pages, layout, animations and components, and
-without the "Made in Framer" badge.
+The public front end: React 19, TypeScript, Vite, Framer Motion and React Router, deployed on
+Vercel from `main` (project root `apps/site`).
 
-## How it's built
+## Layout
 
-- **`src/components/`**: the interactive parts (Composer, Studio, PlaylistView, Library, Cursor,
-  Preloader, …). These are the same React components the Framer site used. `"framer"` resolves
-  to a small stand-in (`src/framer/shim.ts`), because they only used its property-control helpers.
-- **`src/content/`**: every page, the layout template (nav, footer, waveform, wordmark ticker)
-  and the CMS (moods, artists, showcase tracks), exported from the Framer project as data.
-- **`src/framer/`**: the renderer that turns that data into DOM. It covers stacks, grids, pins,
-  fills, borders, masks, filters, text presets, links, CMS lists and code components. It also
-  maps Framer's effects to Framer Motion: appear, scroll-in, hover, press, loop, ticker, the
-  word-by-word headline reveal and page transitions. It produces the same CSS the published
-  Framer site did, checked rule by rule.
-- **`src/styles/`**: fonts (self-hosted copies of the same faces), text presets and the generic
-  text rules.
-- **`public/media`, `public/fonts`**: local copies of every image and font, so nothing loads
-  from Framer's CDN.
+| Path | What it is |
+| --- | --- |
+| `src/components/` | The interactive parts: Composer, Studio, PlaylistView, Library, SharedPlaylist, the shared player, cursor, preloader, energy mixer, spin-the-record and the rest. `MoodwaveAPI.tsx` is the API client, session store and design tokens. |
+| `src/content/` | The pages, the layout template (nav, waveform, footer, wordmark ticker) and the CMS (moods, artists, showcase tracks), stored as data. |
+| `src/framer/` | The renderer that draws that data. It handles stacks, grids, pins, fills, borders, masks, filters, text styles, links, CMS lists and component instances. Effects (appear, scroll-in, hover, press, loop, ticker, the headline word reveal and page transitions) run on Framer Motion. |
+| `src/styles/` | Fonts, text presets and the base text rules. |
+| `public/` | Self-hosted fonts and images. |
+
+The pages were designed in Framer and exported once. This repo is now the source of truth.
+
+## Editing content
+
+- **Text and links:** edit the page JSON in `src/content/pages/`. Each text block is a
+  `RichTextNode` → `TextBlock` → `TextRun` with a `text` attribute.
+- **Moods, artists, showcase tracks:** edit `src/content/cms.json`. Images go in `public/media/`.
+- **Anything interactive:** edit the component in `src/components/`. Its props come from the
+  `$control__…` attributes of its instance in the page JSON.
 
 ## Develop
 
 ```bash
 npm install
-npm run dev
+npm run dev        # http://127.0.0.1:5173
+npm run build      # typecheck + production build (CI runs this too)
 ```
 
-`.env.development.local` with `VITE_API_URL=/api` sends API calls through Vite's proxy to the
-deployed API. Its CORS list only holds the real site addresses.
+API calls go to `API_URL` in `MoodwaveAPI.tsx`, which you can override with `VITE_API_URL` in
+`.env.development.local`:
 
-## Checks
+- `VITE_API_URL=/api` goes through Vite's proxy to the deployed API, whose CORS list only
+  holds the real site.
+- `VITE_API_URL=http://127.0.0.1:8000` uses a local API.
 
-- `npm run build`: typecheck and production build (also runs in CI).
-- `npm run parity`: compares every page with the Framer site at 1280 / 810 / 390 px. It reports
-  any layer that moved or resized and saves side-by-side screenshots to `parity/shots/`.
-- `npm run behaviour`: runs the same hover, press, scroll, nav and menu checks on both sites.
-
-Both use the Chrome already installed on the machine (`playwright-core`, no browser download).
-
-## Re-importing from Framer
-
-`scripts/framer-export/*.js` run through the Framer CLI and are read-only. They write the
-export to the temp folder. `npm run import-framer -- <export dir>` then regenerates
-`src/content`, `src/styles`, `public/media` and `public/fonts`.
+`vercel.json` routes every page to the app, caches hashed assets for a year and sets basic
+security headers. Production builds also generate `sitemap.xml` and `robots.txt` for the
+deployed domain.

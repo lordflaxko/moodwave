@@ -8,14 +8,13 @@ __pycache__/
 
 # Node
 node_modules/
-.next/
-out/
+dist/
 *.tsbuildinfo
-next-env.d.ts
+.vercel/
 
 # Env & OS
 .env
-.env.local
+.env*.local
 .DS_Store
 Thumbs.db
 

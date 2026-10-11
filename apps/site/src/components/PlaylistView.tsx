@@ -1383,13 +1383,6 @@ function PlaylistViewInner(props: PlaylistViewProps) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 1120
- * @framerIntrinsicHeight 900
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight auto
- */
 export default function PlaylistView(props: PlaylistViewProps) {
     return (
         <Safe name="PlaylistView">

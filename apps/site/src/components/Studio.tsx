@@ -462,13 +462,6 @@ function StudioInner(props: StudioProps) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 600
- * @framerIntrinsicHeight 120
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight auto
- */
 export default function Studio(props: StudioProps) {
     return (
         <Safe name="Studio">

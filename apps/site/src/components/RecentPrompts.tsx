@@ -115,13 +115,6 @@ function RecentPromptsInner(props: RecentPromptsProps) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 680
- * @framerIntrinsicHeight 40
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight auto
- */
 export default function RecentPrompts(props: RecentPromptsProps) {
     return (
         <Safe name="RecentPrompts">

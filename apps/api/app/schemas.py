@@ -1,6 +1,6 @@
 """Pydantic models shared by the API surface, the AI layer, and the pipeline.
 
-`apps/web/lib/types.ts` mirrors these shapes for the frontend.
+`apps/site/src/components/MoodwaveAPI.tsx` mirrors these shapes for the site.
 """
 
 from datetime import datetime
@@ -202,7 +202,7 @@ class UserOut(BaseModel):
 
 
 class SessionOut(BaseModel):
-    """A bearer session for clients that can't use the cookie (the Framer site)."""
+    """A bearer session for the site."""
 
     token: str
     user: UserOut

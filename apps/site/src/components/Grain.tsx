@@ -38,13 +38,6 @@ function GrainInner(props: GrainProps) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 120
- * @framerIntrinsicHeight 40
- *
- * @framerSupportedLayoutWidth fixed
- * @framerSupportedLayoutHeight fixed
- */
 export default function Grain(props: GrainProps) {
     return (
         <Safe name="Grain">

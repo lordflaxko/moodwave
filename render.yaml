@@ -1,4 +1,4 @@
-# Render blueprint for the Moodwave API (the Framer site calls it directly).
+# Render blueprint for the Moodwave API (the site on Vercel calls it directly).
 # Deploy: Render dashboard → New → Blueprint → pick this repo. Secrets marked
 # `sync: false` are entered in the dashboard and never committed.
 services:
@@ -22,7 +22,7 @@ services:
       # wiped on every deploy, so SQLite would lose your library.
       - key: DATABASE_URL
         sync: false
-      # Other sites allowed to call the API (the old Framer addresses during the switch).
+      # Other sites allowed to call the API, if any (comma-separated). Usually blank.
       - key: EXTRA_ORIGINS
         sync: false
       # The site (Vite app on Vercel): sign-ins land here.

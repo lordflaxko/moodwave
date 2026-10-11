@@ -7,10 +7,7 @@
     "dev": "vite --host 127.0.0.1 --port 5173",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
-    "preview": "vite preview --host 127.0.0.1 --port 4173",
-    "import-framer": "python scripts/import_framer.py",
-    "parity": "node scripts/parity.mjs",
-    "behaviour": "node scripts/behaviour.mjs"
+    "preview": "vite preview --host 127.0.0.1 --port 4173"
   },
   "dependencies": {
     "framer-motion": "^14.1.0",
@@ -23,7 +20,6 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.0.0",
-    "playwright-core": "^1.56.1",
     "typescript": "^5.9.0",
     "vite": "^8.3.4"
   },

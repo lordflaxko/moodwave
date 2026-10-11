@@ -298,13 +298,6 @@ function EnergyMixerInner(props: EnergyMixerProps) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 1120
- * @framerIntrinsicHeight 560
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight auto
- */
 export default function EnergyMixer(props: EnergyMixerProps) {
     return (
         <Safe name="EnergyMixer">

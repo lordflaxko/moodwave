@@ -179,16 +179,11 @@ async def callback(
         response.delete_cookie(OAUTH_COOKIE_NAME, path="/")
         return response
 
-    # The Framer site signs in with a hand-off code; the local Next.js app uses the cookie.
-    if not (settings.frontend_is_local and settings.site_url == settings.frontend_url.rstrip("/")):
-        response = RedirectResponse(
-            f"{settings.site_url}/#{urlencode({'mw_code': sign_handoff(user.id)})}", status_code=302
-        )
-        response.delete_cookie(OAUTH_COOKIE_NAME, path="/")
-        return response
-    response = RedirectResponse(f"{settings.frontend_url}/generate", status_code=302)
+    # No page asked for the sign-in: hand off to the site's home page.
+    response = RedirectResponse(
+        f"{settings.site_url}/#{urlencode({'mw_code': sign_handoff(user.id)})}", status_code=302
+    )
     response.delete_cookie(OAUTH_COOKIE_NAME, path="/")
-    _set_session_cookie(response, settings, user.id)
     return response
 
 
@@ -231,7 +226,7 @@ def start_demo(request: Request, response: Response, db: DbSession, settings: Se
 
 @router.post("/demo/token", response_model=SessionOut)
 def start_demo_token(db: DbSession, settings: SettingsDep) -> SessionOut:
-    """Demo session as a bearer token, for the Framer site."""
+    """Demo session as a bearer token, for the site."""
     user = _new_demo_user(db, settings)
     return SessionOut(token=sign_session(user.id), user=_user_out(user))
 

@@ -15,13 +15,6 @@ interface MiniEqProps {
 
 const KEYFRAMES = "@keyframes mw-eq{0%,100%{transform:scaleY(.3)}50%{transform:scaleY(1)}}"
 
-/**
- * @framerIntrinsicWidth 14
- * @framerIntrinsicHeight 12
- *
- * @framerSupportedLayoutWidth fixed
- * @framerSupportedLayoutHeight fixed
- */
 export default function MiniEq(props: MiniEqProps) {
     const { color = C.lilac } = props
     return (

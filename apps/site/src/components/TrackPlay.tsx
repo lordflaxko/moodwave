@@ -122,13 +122,6 @@ function TrackPlayInner(props: TrackPlayProps) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 400
- * @framerIntrinsicHeight 60
- *
- * @framerSupportedLayoutWidth any
- * @framerSupportedLayoutHeight any
- */
 export default function TrackPlay(props: TrackPlayProps) {
     return (
         <Safe name="TrackPlay">

@@ -26,7 +26,7 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
 def session_token(request: Request, settings: Settings) -> str | None:
-    """The signed session: a bearer token (Framer site) or the httpOnly cookie (Next.js app)."""
+    """The signed session: a bearer token (the site) or the httpOnly cookie (API docs and tests)."""
     scheme, _, token = request.headers.get("authorization", "").partition(" ")
     if scheme.lower() == "bearer" and token:
         return token.strip()

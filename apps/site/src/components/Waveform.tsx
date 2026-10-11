@@ -104,13 +104,6 @@ function WaveformInner(props: WaveformProps) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 1200
- * @framerIntrinsicHeight 90
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight fixed
- */
 export default function Waveform(props: WaveformProps) {
     return (
         <Safe name="Waveform">

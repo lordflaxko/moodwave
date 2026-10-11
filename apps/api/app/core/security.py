@@ -88,7 +88,7 @@ def verify_oauth_state(cookie_value: str | None, returned_state: str | None) -> 
 
 # --- Cross-site sign-in hand-off --------------------------------------------------------
 #
-# After Spotify sign-in for an external site (the Framer front end), the callback can't set
+# After Spotify sign-in the site (on another domain) needs a session, but the callback can't set
 # a cookie that site would ever send back. Instead it redirects with a short-lived code in
 # the URL fragment (never sent to servers or in Referer), which the page swaps for a
 # bearer token via POST /auth/exchange.

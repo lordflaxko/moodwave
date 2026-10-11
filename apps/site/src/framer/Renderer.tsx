@@ -16,7 +16,7 @@ import {
 } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
 import iconData from "../content/icons.json"
-import { collectionItems, isInternal, PRESETS, resolveVar, siteHref, type FNode, type ListSpec, type Vars } from "./content"
+import { collectionItems, isInternal, PRESETS, resolveVar, type FNode, type ListSpec, type Vars } from "./content"
 import { changedOnly, effectTarget, parseTransition, resolveTokens, restingTarget } from "./effects"
 import { boxStyle, childParent, layoutStyle, surfaceStyle, textBoxStyle, textVars, type Parent } from "./layout"
 import { COMPONENTS, OVERRIDES } from "./registry"
@@ -140,9 +140,8 @@ function hasEffects(a: Record<string, any>) {
 function useLinkProps(link: { href?: string; openInNewTab?: unknown } | undefined, vars: Vars | null) {
     const navigate = useNavigate()
     if (!link) return null
-    const raw = resolveVar(link.href, vars)
-    if (typeof raw !== "string" || !raw) return null
-    const href = siteHref(raw)
+    const href = resolveVar(link.href, vars)
+    if (typeof href !== "string" || !href) return null
     const newTab = resolveVar(link.openInNewTab, vars) === true
     const props: Record<string, unknown> = { href }
     if (newTab) {

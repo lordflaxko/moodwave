@@ -555,13 +555,6 @@ function ComposerInner(props: ComposerProps) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 680
- * @framerIntrinsicHeight 230
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight auto
- */
 export default function Composer(props: ComposerProps) {
     return (
         <Safe name="Composer">

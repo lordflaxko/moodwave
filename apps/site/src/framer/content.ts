@@ -54,14 +54,6 @@ export function collectionItems(spec: ListSpec): Vars[] {
     return items.slice(offset, offset + limit)
 }
 
-const OLD_ORIGINS = ["https://welcome-pattern-009301.framer.app", "https://moodwave.framer.ai"]
-
-/** CMS links were written against the Framer domains; on this site they stay same-origin. */
-export function siteHref(href: string): string {
-    for (const o of OLD_ORIGINS) if (href.startsWith(o)) return href.slice(o.length) || "/"
-    return href
-}
-
 export function isInternal(href: string): boolean {
     return href.startsWith("/") && !href.startsWith("//")
 }

@@ -44,13 +44,6 @@ function RecordSleeveInner(props: RecordSleeveProps) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 170
- * @framerIntrinsicHeight 170
- *
- * @framerSupportedLayoutWidth fixed
- * @framerSupportedLayoutHeight fixed
- */
 export default function RecordSleeve(props: RecordSleeveProps) {
     return (
         <Safe name="RecordSleeve">

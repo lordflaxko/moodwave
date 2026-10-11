@@ -121,13 +121,6 @@ function FeaturedPlaylistsInner(props: FeaturedPlaylistsProps) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 1040
- * @framerIntrinsicHeight 520
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight auto
- */
 export default function FeaturedPlaylists(props: FeaturedPlaylistsProps) {
     return (
         <Safe name="FeaturedPlaylists">

@@ -1,8 +1,7 @@
 """Application settings, loaded from environment variables (and an optional .env file).
 
 Every secret lives here and only here. Nothing in this module is ever sent to the
-browser; the Next.js frontend talks to this service through a same-origin proxy, and
-the Framer site calls it directly with a bearer token.
+browser; the site (apps/site) calls this service directly with a bearer token.
 """
 
 from functools import lru_cache
@@ -21,9 +20,9 @@ class Settings(BaseSettings):
     # --- App ---------------------------------------------------------------
     app_name: str = "Moodwave API"
     environment: str = Field(default="development", description="development | production | test")
-    frontend_url: str = "http://127.0.0.1:3000"
-    # Extra sites (comma-separated origins) allowed to call the API directly with a bearer
-    # token and to receive Spotify sign-ins, e.g. the old Framer addresses.
+    frontend_url: str = "http://127.0.0.1:5173"
+    # Extra sites (comma-separated origins) allowed to call the API with a bearer token and
+    # to receive Spotify sign-ins, e.g. a preview deploy or a second domain.
     extra_origins: str = ""
     # Share links: this API's public address (blank = from the request) and the site page
     # that shows a shared playlist (`?s=<slug>` is appended).
@@ -55,7 +54,7 @@ class Settings(BaseSettings):
     # --- Spotify -------------------------------------------------------------
     spotify_client_id: str | None = None
     spotify_client_secret: str | None = None
-    spotify_redirect_uri: str = "http://127.0.0.1:3000/api/auth/callback"
+    spotify_redirect_uri: str = "http://127.0.0.1:8000/auth/callback"
     spotify_market: str = "US"
 
     # --- Anthropic -------------------------------------------------------------

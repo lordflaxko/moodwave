@@ -470,13 +470,6 @@ function LibraryInner(props: LibraryProps) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 1120
- * @framerIntrinsicHeight 640
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight auto
- */
 export default function Library(props: LibraryProps) {
     return (
         <Safe name="Library">

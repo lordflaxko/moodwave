@@ -148,13 +148,6 @@ function MobileMenuInner(props: MobileMenuProps) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 44
- * @framerIntrinsicHeight 44
- *
- * @framerSupportedLayoutWidth fixed
- * @framerSupportedLayoutHeight fixed
- */
 export default function MobileMenu(props: MobileMenuProps) {
     return (
         <Safe name="MobileMenu">

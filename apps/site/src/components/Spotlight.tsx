@@ -64,13 +64,6 @@ function SpotlightInner(props: SpotlightProps) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 1200
- * @framerIntrinsicHeight 800
- *
- * @framerSupportedLayoutWidth fixed
- * @framerSupportedLayoutHeight fixed
- */
 export default function Spotlight(props: SpotlightProps) {
     return (
         <Safe name="Spotlight">

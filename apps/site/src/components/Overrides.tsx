@@ -2,8 +2,8 @@ import { useMotionTemplate, useMotionValue, useReducedMotion, useSpring, type Mo
 import { forwardRef, useEffect, useState, type ComponentType, type ForwardedRef, type PointerEvent as ReactPointerEvent } from "react"
 
 /**
- * Interaction overrides for canvas layers. Every override forwards `ref`, which Framer's
- * appear and in-view effects depend on.
+ * Interaction overrides for page layers. Every override forwards `ref`, which the appear
+ * and in-view effects depend on.
  * - withTilt / withTiltGlare: 3D tilt that follows the pointer (glare adds a sheen).
  * - withMagnetic: buttons lean toward the pointer, then spring back.
  * - withSleeve: artist card hover → sets --sleeve (record slides out) and lifts the grayscale.

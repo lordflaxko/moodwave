@@ -2,5 +2,3 @@ node_modules
 dist
 .env*.local
 .vercel
-parity/shots
-parity/report.json

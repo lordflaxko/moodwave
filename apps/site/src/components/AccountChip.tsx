@@ -193,10 +193,6 @@ function AccountChipInner(props: AccountChipProps) {
     )
 }
 
-/**
- * @framerSupportedLayoutWidth auto
- * @framerSupportedLayoutHeight auto
- */
 export default function AccountChip(props: AccountChipProps) {
     return (
         <Safe name="AccountChip">

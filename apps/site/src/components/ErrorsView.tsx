@@ -210,13 +210,6 @@ function ErrorsViewInner(props: ErrorsViewProps) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 900
- * @framerIntrinsicHeight 400
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight auto
- */
 export default function ErrorsView(props: ErrorsViewProps) {
     return (
         <Safe name="ErrorsView">

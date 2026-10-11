@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | ![Generation in progress](docs/screenshots/generating.jpg) | ![How it works](docs/screenshots/how-it-works.jpg) | ![Phone layout](docs/screenshots/mobile.jpg) |
 
-**Stack:** Framer (site and React code components) · **Python 3.12 · FastAPI · SQLModel** · Postgres (Neon) · Render · Anthropic Claude · Spotify Web API · GitHub Actions
+**Stack:** **React 19 · TypeScript · Vite · Framer Motion** on Vercel · **Python 3.12 · FastAPI · SQLModel** · Postgres (Neon) on Render · Anthropic Claude · Spotify Web API · GitHub Actions
 
 ---
 
@@ -85,10 +85,10 @@ flowchart LR
     R --> DB
 ```
 
-- **Front end.** A Vite + React 19 + TypeScript app on Vercel ([`apps/site`](apps/site), notes in its [README](apps/site/README.md)). The site was first designed in Framer. Its pages, layout and CMS content are exported as data and drawn by a small renderer that reproduces Framer's layout and effects with Framer Motion. Everything interactive is a typed React component in `apps/site/src/components`. `MoodwaveAPI.tsx` holds the API client, session store, shared player, error reporting and accessibility helpers. The original Framer copies are kept in [`legacy/framer`](legacy/framer).
+- **Front end.** A Vite + React 19 + TypeScript single-page app on Vercel ([`apps/site`](apps/site), details in its [README](apps/site/README.md)). The pages were designed in Framer and live in the repo as data (layout, text, CMS content), drawn by a small renderer with Framer Motion for the effects. Everything interactive is a typed React component. `MoodwaveAPI.tsx` holds the API client, session store, shared player, error reporting and accessibility helpers.
 - **API.** Routers depend on the `AIProvider` and `SpotifyClient` protocols. FastAPI dependencies choose Claude or the offline curator, and a user's Spotify session, the app's own Spotify token for guests, or the bundled demo catalogue for tests.
 - **Sessions.** The site uses a signed bearer token (Spotify sign-in returns through a one-time hand-off code). Spotify tokens are Fernet-encrypted at rest. Keys and tokens never reach the browser.
-- **Ops.** CI runs tests, lint and builds on every push and weekly. A daily smoke test checks the live site and API. Render deploys `main`, and an uptime monitor keeps the free instance awake. The owner dashboard (`/admin`) shows usage, estimated AI spend and the error log.
+- **Ops.** CI runs tests, lint and builds on every push and weekly. A daily smoke test checks the live site and API. Render deploys the API and Vercel deploys the site from `main`, and an uptime monitor keeps the free API instance awake. The owner dashboard (`/admin`) shows usage, estimated AI spend and the error log.
 
 ## The AI workflow
 
@@ -142,7 +142,7 @@ New Spotify apps can't use `/recommendations`, `/audio-features` or related arti
 
 ## Running it locally
 
-**Prerequisites:** Python 3.12+ (and Node.js 20+ for the optional Next.js app).
+**Prerequisites:** Python 3.12+ and Node.js 22+.
 
 ```bash
 cd apps/api
@@ -155,7 +155,15 @@ uvicorn app.main:app --reload --port 8000    # docs at http://127.0.0.1:8000/doc
 
 Add `SPOTIFY_CLIENT_ID`/`SPOTIFY_CLIENT_SECRET` (redirect URI `http://127.0.0.1:8000/auth/callback` or your deployed `/auth/callback`) and `ANTHROPIC_API_KEY` to use the real services.
 
-The site: `cd apps/site && npm install && npm run dev` (it reaches the deployed API through Vite's proxy; see its README). `API_URL` lives in `apps/site/src/components/MoodwaveAPI.tsx`. `apps/web` is the earlier **Next.js** front end, kept for reference (`npm install && npm run dev`, or `docker compose up --build`).
+Then the site, in a second terminal:
+
+```bash
+cd apps/site
+npm install
+npm run dev                       # http://127.0.0.1:5173
+```
+
+By default the dev site talks to the deployed API through Vite's proxy. To use your local API instead, put `VITE_API_URL=http://127.0.0.1:8000` in `apps/site/.env.development.local`.
 
 ## Configuration
 
@@ -166,8 +174,9 @@ Environment variables for `apps/api` (in production they're set in the Render da
 | `ENVIRONMENT` | `development` | `production` turns on secure cookies and production fallbacks |
 | `SESSION_SECRET` | dev placeholder | **Required in production.** Signs sessions, derives the token-encryption key |
 | `DATABASE_URL` | local SQLite | Any SQLAlchemy URL (`postgres://` is converted for psycopg) |
-| `FRONTEND_URL` / `EXTRA_ORIGINS` | localhost / – | Sites allowed to call the API and receive sign-ins |
-| `SHARE_PAGE_URL` | live `/p` page | Where share links forward to |
+| `FRONTEND_URL` | `http://127.0.0.1:5173` | The site: allowed to call the API, and where sign-ins land |
+| `EXTRA_ORIGINS` | – | Other sites allowed to call the API (comma-separated, usually blank) |
+| `SHARE_PAGE_URL` | the site's `/p` page | Where share links forward to |
 | `PUBLIC_API_URL` | from the request | Public API address used in share previews |
 | `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` / `SPOTIFY_REDIRECT_URI` | – | Real Spotify (blank = demo catalogue) |
 | `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` | – / `claude-sonnet-5-5` | Real AI (blank = offline curator) |
@@ -221,12 +230,14 @@ moodwave/
 │  │  │  │  ├─ cover.py        cover art (Pillow) · seed.py (start from a link)
 │  │  │  │  └─ accounts.py     account deletion
 │  │  │  └─ models.py / schemas.py
-│  │  └─ tests/                pytest (77 tests)
-│  ├─ site/                    Vite + React site (Vercel): renderer, components, content
-│  └─ web/                     earlier Next.js front end (reference)
+│  │  └─ tests/                pytest (83 tests)
+│  └─ site/                    React site (Vercel)
+│     ├─ src/components/       Composer, Studio, PlaylistView, Library, player, cursor…
+│     ├─ src/framer/           page renderer: layout, text, effects, CMS lists
+│     ├─ src/content/          pages, layout template and CMS as data
+│     └─ public/               self-hosted fonts and images
 ├─ render.yaml                 Render blueprint
-├─ legacy/framer/             the components as they were in Framer (reference)
-└─ .github/workflows/ci.yml    lint, format, types, tests, build
+└─ .github/workflows/          ci.yml (tests, lint, types, builds) · smoke.yml (daily live check)
 ```
 
 ## Testing and quality
@@ -235,15 +246,16 @@ moodwave/
 cd apps/api && pytest -q        # matching, filters, focus artists, refine, replace, AI fallback,
                                 # hallucination guard, streaming, guests, covers, sharing, deletion
 ruff check app tests && ruff format --check app tests
-cd apps/web && npm run lint && npm run typecheck
+cd apps/site && npm run build   # typecheck + production build
 ```
 
-CI runs these on every push. Framer components are type-checked in Framer before publishing.
+CI runs these on every push.
 
 ## Maintenance
 
 What keeps running on its own:
-- **CI** on every push and every Monday (tests, lint, types, build).
+- **CI** on every push and every Monday (tests, lint, types, builds).
+- **Deploys:** Vercel builds the site and Render builds the API on every push to `main`.
 - **Live smoke test** daily (`.github/workflows/smoke.yml`): API health and config, the site, CORS, share links and a guest round trip, with no secrets and no AI cost. A failure emails the repo owner. Run it any time from the Actions tab.
 - **Uptime monitor** (UptimeRobot) pings `/health` every 5 minutes and emails on downtime.
 - **GitHub security:** Dependabot alerts, secret scanning and push protection are on.
@@ -256,7 +268,7 @@ GitHub pauses scheduled workflows after about 60 days with no repo activity. It 
 - **The LLM names songs, Spotify proves them.** This is robust to Spotify's API restrictions, and verification means invented songs never reach the listener.
 - **Structured outputs over free-text parsing.** The JSON schema is the contract, and Pydantic enforces what the schema can't.
 - **An offline curator behind the same interface.** The product never hard-fails on an AI outage, and guests have a free fallback.
-- **Share links live on the API.** Framer can't vary preview metadata per query string, so `/s/{slug}` serves the Open Graph card and forwards to the site.
+- **Share links live on the API.** The site is a static single-page app with one set of preview tags, so `/s/{slug}` serves each playlist's Open Graph card and forwards to the site.
 - **Streaming with a fallback.** Server-Sent Events show real progress, and a plain request takes over if a proxy blocks streaming.
 
 ## License

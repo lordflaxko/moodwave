@@ -218,13 +218,6 @@ function PreloaderInner(props: PreloaderProps) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 200
- * @framerIntrinsicHeight 40
- *
- * @framerSupportedLayoutWidth fixed
- * @framerSupportedLayoutHeight fixed
- */
 export default function Preloader(props: PreloaderProps) {
     return (
         <Safe name="Preloader">

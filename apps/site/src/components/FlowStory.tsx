@@ -347,13 +347,6 @@ function FlowStoryInner(props: FlowStoryProps) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 1120
- * @framerIntrinsicHeight 900
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight auto
- */
 export default function FlowStory(props: FlowStoryProps) {
     return (
         <Safe name="FlowStory">

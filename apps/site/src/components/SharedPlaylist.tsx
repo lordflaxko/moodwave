@@ -233,13 +233,6 @@ function SharedPlaylistInner(props: SharedPlaylistProps) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 1120
- * @framerIntrinsicHeight 900
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight auto
- */
 export default function SharedPlaylist(props: SharedPlaylistProps) {
     return (
         <Safe name="SharedPlaylist">

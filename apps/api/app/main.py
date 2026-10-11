@@ -39,8 +39,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title=settings.app_name, version="1.0.0", lifespan=lifespan)
 
-# The Next.js app reaches us through its same-origin proxy. The Framer site (EXTRA_ORIGINS)
-# calls the API directly with a bearer token, which is what CORS is for.
+# The site (FRONTEND_URL, plus any EXTRA_ORIGINS) calls the API directly with a bearer token.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins,

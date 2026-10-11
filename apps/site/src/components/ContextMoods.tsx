@@ -194,13 +194,6 @@ function ContextMoodsInner(props: ContextMoodsProps) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 680
- * @framerIntrinsicHeight 80
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight auto
- */
 export default function ContextMoods(props: ContextMoodsProps) {
     return (
         <Safe name="ContextMoods">

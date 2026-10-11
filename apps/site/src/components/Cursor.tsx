@@ -170,13 +170,6 @@ function CursorInner(props: CursorProps) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 40
- * @framerIntrinsicHeight 40
- *
- * @framerSupportedLayoutWidth fixed
- * @framerSupportedLayoutHeight fixed
- */
 export default function Cursor(props: CursorProps) {
     return (
         <Safe name="Cursor">

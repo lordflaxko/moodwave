@@ -314,13 +314,6 @@ function SpinRecordInner(props: SpinRecordProps) {
     )
 }
 
-/**
- * @framerIntrinsicWidth 1120
- * @framerIntrinsicHeight 560
- *
- * @framerSupportedLayoutWidth any-prefer-fixed
- * @framerSupportedLayoutHeight auto
- */
 export default function SpinRecord(props: SpinRecordProps) {
     return (
         <Safe name="SpinRecord">

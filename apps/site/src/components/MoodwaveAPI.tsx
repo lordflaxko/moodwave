@@ -381,16 +381,15 @@ export function go(path: string) {
 
 
 /**
- * Ask the image CDN for a version near `px` wide instead of the full original. Framer,
- * Deezer and Apple artwork URLs can all be resized; anything else is returned unchanged.
+ * Ask the image CDN for a version near `px` wide instead of the full original. Deezer and
+ * Apple artwork URLs can be resized; anything else is returned unchanged.
  */
 export function sized(url: string | null | undefined, px: number): string {
     if (!url) return ""
-    // The site's own images (copied from Framer) are served next to the page.
+    // The site's own images are served next to the page (public/media).
     if (url.startsWith("/media/")) return url
     // Uploaded covers are served by the API (paths like /playlists/{id}/cover.jpg?v=…).
     if (url.startsWith("/")) return `${API_URL}${url}`
-    if (url.includes("framerusercontent.com/images/")) return `${url.split("?")[0]}?scale-down-to=${px <= 256 ? 256 : px <= 512 ? 512 : 1024}`
     if (url.includes("dzcdn.net")) {
         const s = px <= 250 ? 250 : px <= 500 ? 500 : 1000
         return url.replace(/\/\d+x\d+-/, `/${s}x${s}-`)
