@@ -91,9 +91,11 @@ function useEffects(a: Record<string, any>, style: Style): Partial<MotionProps> 
     const reduced = useReducedMotion()
     const props: Partial<MotionProps> & Record<string, unknown> = {}
 
+    let settled: Record<string, number | string> = {}
     if (appear && !reduced) {
         const from = changedOnly(effectTarget(appear.enter ?? {}))
-        const to = { ...restingTarget(from, style), transition: parseTransition(appear.enter?.transition) }
+        settled = restingTarget(from, style)
+        const to = { ...settled, transition: parseTransition(appear.enter?.transition) }
         props.initial = from
         if (appear.trigger === "onInView") {
             props.whileInView = to
@@ -109,7 +111,11 @@ function useEffects(a: Record<string, any>, style: Style): Partial<MotionProps> 
         const t = parseTransition(loop.transition)
         const frames: Record<string, unknown> = {}
         for (const k of Object.keys(target)) frames[k] = [rest[k], target[k]]
-        props.animate = { ...frames, transition: { ...t, repeat: Infinity, repeatType: loop.repeatType ?? "mirror", repeatDelay: parseFloat(loop.repeatDelay ?? "0") } }
+        // Keep the appear's end state (e.g. opacity 1): values dropped from `animate` would
+        // otherwise fall back to `initial`.
+        const repeat = { ...t, repeat: Infinity, repeatType: loop.repeatType ?? "mirror", repeatDelay: parseFloat(loop.repeatDelay ?? "0") }
+        const hold = Object.fromEntries(Object.keys(settled).filter((k) => !(k in frames)).map((k) => [k, { duration: 0 }]))
+        props.animate = { ...settled, ...frames, transition: { ...repeat, ...hold } }
     }
     if (a.hoverEffect) {
         const t = parseTransition(a.hoverEffect.transition)
@@ -342,13 +348,14 @@ function RichText({ node, parent }: { node: FNode; parent: Parent }) {
 
     const fx = a.textEffect && !reduced ? a.textEffect : null
     let token = 0
-    const renderRun = (run: Run, key: string): ReactNode => {
+    const renderRun = (run: Run, key: string, base: Style): ReactNode => {
         let content: ReactNode = run.text
         if (fx) {
             const parts = run.text.split(/(\s+)/)
             content = parts.map((p, i) => (/^\s+$/.test(p) || !p ? p : <WordToken key={i} fx={fx} index={token++}>{p}</WordToken>))
         }
-        const runVars = textVars(run.attrs)
+        // Only what differs from the block needs its own span.
+        const runVars = Object.fromEntries(Object.entries(textVars(run.attrs)).filter(([k, v]) => base[k] !== v))
         return Object.keys(runVars).length ? <span key={key} className="framer-text" style={runVars}>{content}</span> : <Fragment key={key}>{content}</Fragment>
     }
 
@@ -356,7 +363,10 @@ function RichText({ node, parent }: { node: FNode; parent: Parent }) {
     return (
         <El data-framer-component-type="RichTextContainer" {...effects} style={{ ...style, transform: "none" }}>
             {blocks.map((b, bi) => {
-                let inner: ReactNode = b.runs.map((r, ri) => (r === "br" ? <br key={ri} className="framer-text" /> : renderRun(r, String(ri))))
+                // As on the live site, a block without a preset carries its first run's font and colour.
+                const first = b.runs.find((r): r is Run => r !== "br")
+                const base: Style = { ...blockStyle, ...(first && !preset ? textVars(first.attrs) : {}) }
+                let inner: ReactNode = b.runs.map((r, ri) => (r === "br" ? <br key={ri} className="framer-text" /> : renderRun(r, String(ri), base)))
                 if (linkProps) {
                     const current = typeof linkProps.href === "string" && linkProps.href === location.pathname
                     inner = (
@@ -365,7 +375,7 @@ function RichText({ node, parent }: { node: FNode; parent: Parent }) {
                         </a>
                     )
                 }
-                return createElement(b.tag, { key: bi, className: `framer-text${preset ? ` framer-styles-preset-${preset}` : ""}`, dir: "auto", style: blockStyle }, inner)
+                return createElement(b.tag, { key: bi, className: `framer-text${preset ? ` framer-styles-preset-${preset}` : ""}`, dir: "auto", style: base }, inner)
             })}
         </El>
     )

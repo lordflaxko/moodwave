@@ -15,10 +15,14 @@ const ROUTES: Record<string, string> = {
 }
 const loaders = import.meta.glob<FNode>("./content/pages/*.json", { import: "default" })
 const trees = new Map<string, Promise<FNode>>()
+const loaded = new Map<string, FNode>()
 function loadTree(key: string): Promise<FNode> {
     let p = trees.get(key)
     if (!p) {
-        p = loaders[`./content/pages/${key}.json`]()
+        p = loaders[`./content/pages/${key}.json`]().then((tree) => {
+            loaded.set(key, tree)
+            return tree
+        })
         trees.set(key, p)
     }
     return p
@@ -68,7 +72,8 @@ function PageBody({ tree, animate }: { tree: FNode; animate: boolean }) {
 }
 
 function PageRoute({ name, first }: { name: string; first: boolean }) {
-    const tree = use(loadTree(name))
+    // Already-loaded pages render straight away (no suspend, no flash on navigation).
+    const tree = loaded.get(name) ?? use(loadTree(name))
     return <PageBody tree={tree} animate={!first} />
 }
 
@@ -103,16 +108,18 @@ export default function App() {
         const id = setTimeout(() => Object.values(ROUTES).forEach(loadTree), 1500)
         return () => clearTimeout(id)
     }, [])
+    // Nothing shows until the first page's data is in, so the preloader (part of the page) is
+    // the first thing on screen, as on the Framer site, rather than a bare nav and footer.
     return (
-        <Template>
-            <Suspense fallback={null}>
+        <Suspense fallback={<div style={{ minHeight: "100vh", background: "#0b0a0d" }} />}>
+            <Template>
                 <Routes>
                     {Object.entries(ROUTES).map(([p, name]) => (
                         <Route key={p} path={p} element={<PageRoute key={p} name={name} first={first.current} />} />
                     ))}
                     <Route path="*" element={<PageRoute name="404" first={first.current} />} />
                 </Routes>
-            </Suspense>
-        </Template>
+            </Template>
+        </Suspense>
     )
 }

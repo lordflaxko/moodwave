@@ -33,12 +33,23 @@ function measure() {
     const els = document.querySelectorAll('[data-framer-name], [data-framer-component-type="RichTextContainer"]')
     for (const el of els) {
         if (el.closest("#__framer-badge-container")) continue
-        if (el.closest('li.ticker-item[aria-hidden="true"]')) continue // ticker copies: count differs by design
+        // Ticker copies: how many exist (and which are marked hidden) differs by design.
+        const li = el.closest("li.ticker-item")
+        if (li && li !== li.parentElement.firstElementChild) continue
         if (el.offsetParent === null && getComputedStyle(el).position !== "fixed") continue
         const name = el.getAttribute("data-framer-name") ?? "text:" + el.textContent.trim().slice(0, 32)
         seen[name] = (seen[name] ?? 0) + 1
         const [x, y] = pos(el)
-        out[`${name}#${seen[name]}`] = [Math.round(x), Math.round(y), el.offsetWidth, el.offsetHeight]
+        // Effective opacity (catches layers stuck invisible) and, for text, the rendered font.
+        let op = 1
+        for (let e = el; e && e.nodeType === 1; e = e.parentElement) op *= parseFloat(getComputedStyle(e).opacity)
+        const box = [Math.round(x), Math.round(y), el.offsetWidth, el.offsetHeight, Math.round(op * 10) / 10]
+        const t = el.matches('[data-framer-component-type="RichTextContainer"]') && el.firstElementChild
+        if (t) {
+            const cs = getComputedStyle(t)
+            box.push(`${cs.fontFamily.split(",")[0]} ${cs.fontSize} ${cs.fontWeight} ${cs.color}`)
+        }
+        out[`${name}#${seen[name]}`] = box
     }
     return { height: document.documentElement.scrollHeight, boxes: out }
 }
@@ -46,6 +57,13 @@ function measure() {
 async function snapshot(page, url, file) {
     await page.goto(url, { waitUntil: "load", timeout: 60000 }).catch(() => {})
     let data
+    await page.evaluate(async () => {
+        for (let y = 0; y < document.documentElement.scrollHeight; y += 500) {
+            window.scrollTo(0, y)
+            await new Promise((r) => setTimeout(r, 120))
+        }
+        window.scrollTo(0, 0)
+    }).catch(() => {})
     for (let attempt = 0; attempt < 5 && !data; attempt++) {
         // Framer swaps in its hydrated page after load; wait for things to settle.
         await page.waitForTimeout(2500)
@@ -78,7 +96,8 @@ for (const width of WIDTHS) {
                 diffs.push(`missing: ${k}`)
                 continue
             }
-            if (a.some((v, i) => Math.abs(v - b[i]) > TOLERANCE)) diffs.push(`${k}: [${a}] → [${b}]`)
+            const off = a.some((v, i) => (typeof v === "number" ? Math.abs(v - b[i]) > (i === 4 ? 0.15 : TOLERANCE) : v !== b[i]))
+            if (off) diffs.push(`${k}: [${a}] → [${b}]`)
         }
         for (const k of Object.keys(local.boxes)) if (!live.boxes[k]) diffs.push(`extra: ${k}`)
         report.push({ path, width, diffs })

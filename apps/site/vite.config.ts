@@ -37,18 +37,20 @@ export default defineConfig(({ command }) => ({
     build: { chunkSizeWarningLimit: 900 },
     // Dev only: talk to the deployed API through a same-origin proxy (its CORS list holds the
     // real site origins, not localhost). Set VITE_API_URL=/api in .env.development.local.
-    server:
-        command === "serve"
-            ? {
-                  proxy: {
-                      "/api": {
-                          target: "https://moodwave-api.onrender.com",
-                          changeOrigin: true,
-                          agent: devAgent(),
-                          rewrite: (p: string) => p.replace(/^\/api/, ""),
-                          configure: (proxy) => proxy.on("proxyReq", (req) => req.removeHeader("origin")),
-                      },
-                  },
-              }
-            : undefined,
+    // `npm run preview` gets the same proxy (build with VITE_API_URL=/api to use it).
+    server: command === "serve" ? { proxy: apiProxy() } : undefined,
+    preview: command === "serve" ? { proxy: apiProxy() } : undefined,
 }))
+
+function apiProxy() {
+    return {
+        "/api": {
+            target: "https://moodwave-api.onrender.com",
+            changeOrigin: true,
+            agent: devAgent(),
+            rewrite: (p: string) => p.replace(/^\/api/, ""),
+            configure: (proxy: { on: (e: "proxyReq", cb: (req: { removeHeader: (h: string) => void }) => void) => void }) =>
+                proxy.on("proxyReq", (req) => req.removeHeader("origin")),
+        },
+    }
+}

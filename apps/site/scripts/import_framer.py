@@ -135,6 +135,8 @@ for h in live.values():
 
 
 def parse_rules(css: str, media: str = "", out=None):
+    """Flat (media, selector, body) list. Bodies keep any nested blocks intact, so every
+    emitted rule is brace-balanced (the files are concatenated in the production build)."""
     out = [] if out is None else out
     pos = 0
     while True:
@@ -142,17 +144,18 @@ def parse_rules(css: str, media: str = "", out=None):
         if not mm:
             break
         sel = mm.group(1).strip()
-        if sel.startswith("@media") or sel.startswith("@supports"):
-            depth, j = 1, mm.end()
-            while depth:
-                depth += {"{": 1, "}": -1}.get(css[j], 0)
-                j += 1
-            parse_rules(css[mm.end() : j - 1], sel, out)
-            pos = j
+        depth, j = 1, mm.end()
+        while depth and j < len(css):
+            depth += {"{": 1, "}": -1}.get(css[j], 0)
+            j += 1
+        body = css[mm.end() : j - 1]
+        if (sel.startswith("@media") or sel.startswith("@supports")) and not media:
+            parse_rules(body, sel, out)
+        elif sel.startswith("@keyframes"):
+            pass  # components add their own keyframes at runtime
         else:
-            j = css.index("}", mm.end())
-            out.append((media, sel, css[mm.end() : j]))
-            pos = j + 1
+            out.append((media, sel, body))
+        pos = j
     return out
 
 
@@ -218,6 +221,7 @@ for media, sel, body in rules:
 
 def emit(rs) -> str:
     out = []
+    rs = [r for r in rs if r[2].count("{") == r[2].count("}") and r[1]]
     for media, sel, body in rs:
         rule = f"{sel}{{{body}}}"
         out.append(f"{media}{{{rule}}}" if media else rule)
