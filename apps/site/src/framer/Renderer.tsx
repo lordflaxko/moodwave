@@ -6,6 +6,7 @@ import {
     Fragment,
     useContext,
     useLayoutEffect,
+    useMemo,
     useRef,
     useState,
     useSyncExternalStore,
@@ -435,11 +436,30 @@ function objectByKey(x: Record<string, unknown>, controls: Record<string, { titl
     const out: Record<string, unknown> = { ...x }
     for (const [key, c] of Object.entries(controls)) {
         if (out[key] !== undefined || !c.title) continue
-        const words = c.title.split(/\s+/)
-        const stored = words[0].toLowerCase() + words.slice(1).map((w) => w[0].toUpperCase() + w.slice(1)).join("")
+        const stored = titleKey(c.title)
         if (x[stored] !== undefined) out[key] = x[stored]
     }
     return out
+}
+
+/** Camel-cased control title, the key Framer stores some values under ("Cover URL" → coverURL). */
+function titleKey(title: string): string {
+    const words = title.split(/\s+/)
+    return words[0].toLowerCase() + words.slice(1).map((w) => w[0].toUpperCase() + w.slice(1)).join("")
+}
+
+function instanceProps(a: Record<string, any>, Component: ComponentType<any>, vars: Vars | null): Record<string, unknown> {
+    const controls = getControls(Component) as Record<string, Record<string, any>>
+    const byTitle: Record<string, string> = {}
+    for (const [key, c] of Object.entries(controls)) if (c.title) byTitle[titleKey(c.title)] = key
+    const props: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(a)) {
+        if (!k.startsWith("$control__")) continue
+        const stored = k.slice("$control__".length)
+        const key = controls[stored] ? stored : (byTitle[stored] ?? stored)
+        props[key] = controlValue(v, controls[key], vars)
+    }
+    return props
 }
 
 function Instance({ node, parent }: { node: FNode; parent: Parent }) {
@@ -448,17 +468,12 @@ function Instance({ node, parent }: { node: FNode; parent: Parent }) {
     const style: Style = boxStyle(a, parent, "component")
     if (hasEffects(a)) style.willChange = "transform"
     const effects = useEffects(a, style)
-    if (hidden(a)) return null
     const name = node.$componentDisplayName ?? ""
     const Component = COMPONENTS[name]
-    if (!Component) return null
-    const controls = getControls(Component) as Record<string, Record<string, any>>
-    const props: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(a)) {
-        if (!k.startsWith("$control__")) continue
-        const key = k.slice("$control__".length)
-        props[key] = controlValue(v, controls[key], vars)
-    }
+    // Built once per instance: components key effects on these props (a fresh array every
+    // render would restart things like the Composer's typewriter).
+    const props = useMemo(() => (Component ? instanceProps(a, Component, vars) : {}), [a, Component, vars])
+    if (hidden(a) || !Component) return null
     const inner: CSSProperties = {}
     if (a.width !== "auto") inner.width = "100%"
     if (a.height !== "auto") inner.height = "100%"
