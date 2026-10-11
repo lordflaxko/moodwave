@@ -2,7 +2,7 @@
 
 > **Describe a moment. Hear it.** Type a mood, a place or a feeling in plain words, and Moodwave's AI plans a playlist, finds **real songs on Spotify** (every pick is verified, none are made up), explains why each one fits, and lets you reshape it, share it and save it to Spotify.
 
-**▶ Live: [moodwave.framer.ai](https://moodwave.framer.ai)**. No account needed: choose **Try it as a guest**.
+**▶ Live: [moodwave-pearl.vercel.app](https://moodwave-pearl.vercel.app)**. No account needed: choose **Try it as a guest**.
 
 ![Moodwave home page](docs/screenshots/landing.jpg)
 
@@ -65,7 +65,7 @@
 ```mermaid
 flowchart LR
     subgraph Browser
-      Site["Framer site<br/>+ React code components<br/>(apps/framer)"]
+      Site["Vite + React site on Vercel<br/>(apps/site)"]
     end
     subgraph Render["FastAPI on Render (apps/api)"]
       R["Routers<br/>auth · playlists · share · feedback · telemetry"]
@@ -85,9 +85,9 @@ flowchart LR
     R --> DB
 ```
 
-- **Framer front end.** Pages, layout and content (including the artist tickers in the Framer CMS) are built in Framer. Everything interactive is a typed React code component, mirrored in [`apps/framer/`](apps/framer) with notes in its [README](apps/framer/README.md). `MoodwaveAPI.tsx` holds the API client, session store, shared player, error reporting and accessibility helpers.
+- **Front end.** A Vite + React 19 + TypeScript app on Vercel ([`apps/site`](apps/site), notes in its [README](apps/site/README.md)). The site was first designed in Framer. Its pages, layout and CMS content are exported as data and drawn by a small renderer that reproduces Framer's layout and effects with Framer Motion. Everything interactive is a typed React component in `apps/site/src/components`. `MoodwaveAPI.tsx` holds the API client, session store, shared player, error reporting and accessibility helpers. The original Framer copies are kept in [`legacy/framer`](legacy/framer).
 - **API.** Routers depend on the `AIProvider` and `SpotifyClient` protocols. FastAPI dependencies choose Claude or the offline curator, and a user's Spotify session, the app's own Spotify token for guests, or the bundled demo catalogue for tests.
-- **Sessions.** The Framer site uses a signed bearer token (Spotify sign-in returns through a one-time hand-off code). Spotify tokens are Fernet-encrypted at rest. Keys and tokens never reach the browser.
+- **Sessions.** The site uses a signed bearer token (Spotify sign-in returns through a one-time hand-off code). Spotify tokens are Fernet-encrypted at rest. Keys and tokens never reach the browser.
 - **Ops.** CI runs tests, lint and builds on every push and weekly. A daily smoke test checks the live site and API. Render deploys `main`, and an uptime monitor keeps the free instance awake. The owner dashboard (`/admin`) shows usage, estimated AI spend and the error log.
 
 ## The AI workflow
@@ -138,7 +138,7 @@ New Spotify apps can't use `/recommendations`, `/audio-features` or related arti
 ## Guests, sign-in and privacy
 
 - **Spotify development mode** only lets allow-listed accounts sign in (up to 25). Everyone else sees an invite-only notice and can **try it as a guest**: real catalogue and AI, 5 playlists a day of up to 30 songs, and a shared daily AI budget. Guests can't save to Spotify, and guest data expires after 30 days. If an allow-listed guest signs in, their guest playlists move to their account.
-- **Your data:** see the live [Privacy](https://moodwave.framer.ai/privacy) and [Terms](https://moodwave.framer.ai/terms) pages. Accounts can be deleted in one click (`DELETE /auth/me`).
+- **Your data:** see the live [Privacy](https://moodwave-pearl.vercel.app/privacy) and [Terms](https://moodwave-pearl.vercel.app/terms) pages. Accounts can be deleted in one click (`DELETE /auth/me`).
 
 ## Running it locally
 
@@ -155,7 +155,7 @@ uvicorn app.main:app --reload --port 8000    # docs at http://127.0.0.1:8000/doc
 
 Add `SPOTIFY_CLIENT_ID`/`SPOTIFY_CLIENT_SECRET` (redirect URI `http://127.0.0.1:8000/auth/callback` or your deployed `/auth/callback`) and `ANTHROPIC_API_KEY` to use the real services.
 
-The Framer site points at `API_URL` in `apps/framer/MoodwaveAPI.tsx`. `apps/web` is the earlier **Next.js** front end, kept for reference (`npm install && npm run dev`, or `docker compose up --build`).
+The site: `cd apps/site && npm install && npm run dev` (it reaches the deployed API through Vite's proxy; see its README). `API_URL` lives in `apps/site/src/components/MoodwaveAPI.tsx`. `apps/web` is the earlier **Next.js** front end, kept for reference (`npm install && npm run dev`, or `docker compose up --build`).
 
 ## Configuration
 
@@ -222,9 +222,10 @@ moodwave/
 │  │  │  │  └─ accounts.py     account deletion
 │  │  │  └─ models.py / schemas.py
 │  │  └─ tests/                pytest (77 tests)
-│  ├─ framer/                  Framer code components (mirror) + README
+│  ├─ site/                    Vite + React site (Vercel): renderer, components, content
 │  └─ web/                     earlier Next.js front end (reference)
 ├─ render.yaml                 Render blueprint
+├─ legacy/framer/             the components as they were in Framer (reference)
 └─ .github/workflows/ci.yml    lint, format, types, tests, build
 ```
 

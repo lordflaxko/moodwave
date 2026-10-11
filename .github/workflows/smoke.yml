@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       API: https://moodwave-api.onrender.com
-      SITE: https://moodwave.framer.ai
+      SITE: https://moodwave-pearl.vercel.app
     steps:
       - name: Wake the API (free instances can be asleep)
         run: |

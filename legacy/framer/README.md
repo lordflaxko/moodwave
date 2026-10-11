@@ -1,3 +1,5 @@
+> **Legacy.** The site moved off Framer to [`apps/site`](../../apps/site) (Vite + React on Vercel), which now holds the live copies of these components. This folder is kept for reference.
+
 # Framer code components
 
 The Moodwave site (Home, How it works, Create, Playlist, Library) is built in Framer.

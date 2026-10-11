@@ -23,12 +23,12 @@ class Settings(BaseSettings):
     environment: str = Field(default="development", description="development | production | test")
     frontend_url: str = "http://127.0.0.1:3000"
     # Extra sites (comma-separated origins) allowed to call the API directly with a bearer
-    # token and to receive Spotify sign-ins, e.g. the published Framer site.
+    # token and to receive Spotify sign-ins, e.g. the old Framer addresses.
     extra_origins: str = ""
     # Share links: this API's public address (blank = from the request) and the site page
     # that shows a shared playlist (`?s=<slug>` is appended).
     public_api_url: str = ""
-    share_page_url: str = "https://moodwave.framer.ai/p"
+    share_page_url: str = "https://moodwave-pearl.vercel.app/p"
     database_url: str = f"sqlite:///{(API_ROOT / 'moodwave.db').as_posix()}"
     # Anonymous demo sessions. Turn off on a public deploy so strangers can't spend AI credits.
     allow_demo: bool = True
